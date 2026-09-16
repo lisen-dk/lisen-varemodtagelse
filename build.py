@@ -212,11 +212,13 @@ def klassificer(o):
     Hver ikke-afsendt linje er enten
       - presell: varen ligger ikke på nogen hylde, eller der er reserveret flere stk., end der er
         på lager (res > tot), eller
-      - lager:   med antal i Ramløse (lager + butik) og i Helsinge.
+      - lager:   med antal på Lager Ramløse, i butikken og i Helsinge.
+    Butikken er sidste mulighed: en linje tæller kun som "Ramløse" via butikken, hvis varen
+    hverken ligger på Lager Ramløse eller i Helsinge.
     Ordren er
       - PAK_Ramløse   alle lagerlinjer kan tages i Ramløse (har forrang)
       - PAK_Helsinge  ellers, hvis alle lagerlinjer kan tages i Helsinge
-      - FlereLagre    ellers (mindst én vare kun i Helsinge og en anden kun i Ramløse)
+      - FlereLagre    ellers – varer uden for Lager Ramløse flyttes fra Helsinge
     Retur/karantæne og totes tæller ikke som lager.
     """
     linjer, antal_stk = [], 0
@@ -244,11 +246,13 @@ def klassificer(o):
         presell = tal(p.get("res")) > tal(p.get("tot")) or (ramlose <= 0 and stk["helsinge"] <= 0)
         linjer.append({"li": li, "v": v, "vid": gid_id(v.get("id")), "sku": li.get("sku") or "", "q": q,
                        "presell": presell, "ramlose": ramlose, "hel": stk["helsinge"], "hylder": hel_hylder,
-                       "lager_stk": stk["lager"], "butik_stk": stk["butik"], "butik_hylder": butik_hylder})
+                       "lager_stk": stk["lager"], "butik_stk": stk["butik"], "butik_hylder": butik_hylder,
+                       # butikken bruges kun, når varen hverken er på Lager Ramløse eller i Helsinge
+                       "kan_r": stk["lager"] > 0 or (stk["butik"] > 0 and stk["helsinge"] <= 0)})
     lager = [l for l in linjer if not l["presell"]]
     pak = ""
     if lager:
-        if all(l["ramlose"] > 0 for l in lager):
+        if all(l["kan_r"] for l in lager):
             pak = "PAK_Ramløse"
         elif all(l["hel"] > 0 for l in lager):
             pak = "PAK_Helsinge"
@@ -266,7 +270,7 @@ def beregn_flyt(klass):
             continue
         venter = bool(k["presell"])
         oid = gid_id(o["id"])
-        flyt = [l for l in k["lager"] if l["ramlose"] <= 0]
+        flyt = [l for l in k["lager"] if l["lager_stk"] <= 0 and l["hel"] > 0]
         ordrer_ud.append({
             "id": oid, "n": o["name"], "t": o["createdAt"],
             "linjer": len(k["lager"]), "flyt": tal(sum(l["q"] for l in flyt)), "presell": venter,

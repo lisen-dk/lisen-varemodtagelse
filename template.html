@@ -502,7 +502,7 @@ function visFlyt(){
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
   };
-  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren har mindst én vare, der kun ligger i Helsinge, og mindst én, der kun ligger i Ramløse (lager eller butik). Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
+  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren kan hverken pakkes samlet på Lager Ramløse eller i Helsinge. Butikken bruges kun til varer, der ikke findes på nogen af de to lagre. Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
 }
 
