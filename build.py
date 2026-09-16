@@ -317,7 +317,7 @@ def beregn_kun_helsinge(lager, varer, klass):
         g["ordrer"] = [{"id": x["id"], "n": x["n"]} for x in ordrer[:12]]
         g["stk"], g["ord_stk"] = tal(g["stk"]), tal(g["ord_stk"])
         ud.append(g)
-    ud.sort(key=lambda g: (-g["ord_stk"], g["navn"].lower(), g["farve"].lower()))
+    ud.sort(key=lambda g: (-g["stk"], g["navn"].lower(), g["farve"].lower()))
     return ud
 
 
@@ -402,7 +402,7 @@ def beregn_flyt(klass):
             e["ordrer"].append({"id": oid, "n": o["name"], "presell": venter})
             e["aeldst"] = min(e["aeldst"], o["createdAt"])
     ordrer_ud.sort(key=lambda x: x["t"])
-    return {"ordrer": ordrer_ud, "varer": sorted(varer.values(), key=lambda x: (x["aeldst"], x["sku"]))}
+    return {"ordrer": ordrer_ud, "varer": sorted(varer.values(), key=lambda x: (-x["stk"], x["aeldst"], x["sku"]))}
 
 
 def vare_info(l):
@@ -488,6 +488,15 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
     for vid in var_po:
         var_po[vid] = [(d, pid) for _, d, pid in sorted(var_po[vid])]
     po_by_id = {p["id"]: p for p in pos}
+    detaljer = detaljer or {}
+
+    def billede(sku):
+        return lille_billede((detaljer.get(sku) or {}).get("imageUrl"))
+
+    def vare_navn(sku):
+        v = detaljer.get(sku) or {}
+        navn, farve = navn_farve(v.get("productName") or sku)
+        return navn, farve, v.get("variantName") or ""
     ps_paa_po = collections.Counter()
     for p in pos:
         for l in p["linjer"]:
@@ -526,7 +535,9 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
             vv["ordrer"].add(o["id"])
         if not koblet:
             uden.append({"id": o["id"], "n": o["n"], "t": o["t"],
-                         "skus": [l["sku"] for l in o["lines"]][:6]})
+                         "skus": [l["sku"] for l in o["lines"]][:6],
+                         "varer": [dict(zip(("navn", "farve", "str"), vare_navn(l["sku"])),
+                                        sku=l["sku"], img=billede(l["sku"])) for l in o["lines"]][:6]})
 
     ud_po = []
     for p in pos:
@@ -543,7 +554,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
             "bestilt_stk": tal(sum(l["qty"] for l in p["linjer"])),
             "ps": tal(sum(l["mangler"] for l in mangler if l["ps"])),
             "linjer": [{"sku": l["sku"], "navn": l["navn"], "farve": l["farve"], "str": l["str"],
-                        "stk": l["mangler"], "ps": l["ps"],
+                        "stk": l["mangler"], "ps": l["ps"], "img": billede(l["sku"]),
                         "vent": po_linje_vent[p["id"]].get(l["vid"], 0)} for l in mangler],
             "ordrer": sorted(po_ord.get(p["id"], {}).values(), key=lambda x: x["t"]),
         })
@@ -555,7 +566,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
         pp = po_by_id[pid]
         varer.append({
             "sku": l.get("sku"), "navn": l.get("navn"), "farve": l.get("farve"),
-            "maerke": l.get("maerke"), "str": l.get("str"),
+            "maerke": l.get("maerke"), "str": l.get("str"), "img": billede(l.get("sku")),
             "stk": vv["stk"], "ordrer": len(vv["ordrer"]), "aeldst": vv["aeldst"],
             "ps_po": ps_paa_po.get(vid, 0),
             "dato": var_po[vid][0][0], "po": pid, "ref": pp["ref"], "lev": pp["lev"],
@@ -571,6 +582,31 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
 
 
 # ---------------------------------------------------------------- kryptering og side
+
+def komprimer_billeder(d):
+    """Fælles start på billedadresserne gemmes én gang (d["imgp"]); hvert billede får "~" + resten."""
+    felter = []
+
+    def find(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "img" and isinstance(v, str) and v:
+                    felter.append(x)
+                else:
+                    find(v)
+        elif isinstance(x, list):
+            for v in x:
+                find(v)
+    find(d)
+    starter = collections.Counter(x["img"].rsplit("/", 1)[0] + "/" for x in felter)
+    if not starter:
+        return
+    prefix = starter.most_common(1)[0][0]
+    d["imgp"] = prefix
+    for x in felter:
+        if x["img"].startswith(prefix):
+            x["img"] = "~" + x["img"][len(prefix):]
+
 
 def krypter(data_bytes, adgangskode):
     salt, iv = SALT, os.urandom(12)
@@ -611,6 +647,7 @@ def main():
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
 
+    komprimer_billeder(d)
     blob = krypter(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), adgangskode)
     skabelon = open(os.path.join(HER, "template.html"), encoding="utf-8").read()
     side = skabelon.replace("__DATA__", json.dumps(blob))
