@@ -118,13 +118,17 @@ def hent_sp_ordrer():
     if TEST_DIR:
         f = os.path.join(TEST_DIR, "sp_orders.json")
         return json.load(open(f)) if os.path.exists(f) else []
-    out = []
+    out, fuld, forrige = [], 0, None
     try:
-        for side in range(1, 41):
+        for side in range(1, 61):
             d = sp_get(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize={SP_SIDE}&p={side}")
             data = d.get("data") or []
+            if not data or data[0].get("id") == forrige:
+                break
+            forrige = data[0].get("id")
             out += [[x.get("id"), x.get("orderNo") or "", str(x.get("externalId") or "")] for x in data]
-            if len(data) < SP_SIDE:
+            fuld = fuld or len(data)  # SmartPack giver højst 300 pr. side, uanset pageSize
+            if len(data) < fuld:
                 break
     except Exception as e:  # noqa: BLE001 – links er en bekvemmelighed, siden skal stadig bygges
         log(f"SmartPack-ordrer kunne ikke hentes ({type(e).__name__}) – ordrer linker til Shopify")
