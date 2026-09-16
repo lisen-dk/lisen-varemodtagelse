@@ -89,7 +89,8 @@ def http(url, data=None, headers=None, method=None, tries=6, timeout=300):
 # ---------------------------------------------------------------- SmartPack
 
 def sp_get(path):
-    return json.loads(http(SP_BASE + path, headers={
+    url = path if path.startswith("http") else SP_BASE + path
+    return json.loads(http(url, headers={
         "X-SmartPack-AppId": os.environ["SMARTPACK_APP_ID"],
         "X-SmartPack-AccessToken": os.environ["SMARTPACK_TOKEN"],
     }))
@@ -105,6 +106,47 @@ def hent_po():
         path = d.get("nextPage")
         sider += 1
     return out
+
+
+# Åbne SmartPack-ordrer (alt andet end Pakket og Annulleret), så dashboardet kan linke til SmartPack
+SP_ORDRE_STATES = "0,1,2,3,4,-5,-10,-20"
+SP_SIDE = 500
+
+
+def hent_sp_ordrer():
+    """[(smartpack-id, ordrenummer, externalId)] for åbne ordrer. Fejler det, linker siden til Shopify."""
+    if TEST_DIR:
+        f = os.path.join(TEST_DIR, "sp_orders.json")
+        return json.load(open(f)) if os.path.exists(f) else []
+    out = []
+    try:
+        for side in range(1, 41):
+            d = sp_get(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize={SP_SIDE}&p={side}")
+            data = d.get("data") or []
+            out += [[x.get("id"), x.get("orderNo") or "", str(x.get("externalId") or "")] for x in data]
+            if len(data) < SP_SIDE:
+                break
+    except Exception as e:  # noqa: BLE001 – links er en bekvemmelighed, siden skal stadig bygges
+        log(f"SmartPack-ordrer kunne ikke hentes ({type(e).__name__}) – ordrer linker til Shopify")
+    return out
+
+
+def sp_links(raw_ordrer, sp_ordrer):
+    """{shopify-ordre-id: smartpack-id} for de åbne Shopify-ordrer, der findes i SmartPack."""
+    efter_nr, efter_ext = {}, {}
+    for sid, nr, ext in sp_ordrer:
+        if sid is None:
+            continue
+        efter_nr.setdefault(nr.lstrip("#").strip(), sid)
+        if ext:
+            efter_ext.setdefault(ext, sid)
+    ud = {}
+    for o in raw_ordrer:
+        oid = gid_id(o.get("id"))
+        sid = efter_nr.get((o.get("name") or "").lstrip("#").strip()) or efter_ext.get(oid)
+        if sid is not None:
+            ud[oid] = sid
+    return ud
 
 
 # ---------------------------------------------------------------- Shopify
@@ -480,6 +522,9 @@ def main():
     log(f"Shopify: {len(raw_ordrer)} åbne, ikke afsendte ordrer")
 
     d = beregn(raw_po, raw_ordrer)
+    sp_ordrer = hent_sp_ordrer()
+    d["sp"] = sp_links(raw_ordrer, sp_ordrer)
+    log(f"SmartPack-ordrer: {len(sp_ordrer)} åbne · {len(d['sp'])} af {len(raw_ordrer)} Shopify-ordrer linker til SmartPack")
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")

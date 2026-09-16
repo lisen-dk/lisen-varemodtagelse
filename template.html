@@ -80,6 +80,7 @@ h1 small{display:block;font-size:12px;font-weight:600;letter-spacing:.14em;color
 .flyt-band span{font-size:13px;color:var(--ink2)}
 .flyt-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--flyt)}
 .flyt-band .gaa{margin-left:auto;font-weight:700;font-size:13px;color:var(--link)}
+.shop-mark{font-size:.85em;color:var(--ink3)}
 .flyt-band.butik-band{border-left-color:var(--butik)}
 .flyt-band.butik-band:hover{border-color:var(--butik)}
 .flyt-band.butik-band .tag{color:var(--butik)}
@@ -304,6 +305,14 @@ function vis(D){
 document.getElementById('app').hidden = false;
 const SP_PO = id => 'https://lisen.smartpack.dk/admin/customers/PurchaseOrders/Form?id=9d9288cc-5982-4339-bf14-639183815195&purchaseOrder=' + id;
 const SH_ORD = id => 'https://admin.shopify.com/store/lisendk/orders/' + id;
+// Ordrer åbner i SmartPack; findes ordren ikke dér (endnu), åbner den i Shopify
+const SP_ORD = id => 'https://lisen.smartpack.dk/admin/customers/orders/info?orderId=' + encodeURIComponent(id);
+function ordA(o){
+  const sp = (D.sp || {})[o.id];
+  return sp != null
+    ? '<a href="'+SP_ORD(sp)+'" target="_blank" rel="noopener" title="Åbn i SmartPack">'+esc(o.n)+'</a>'
+    : '<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener" title="Ikke fundet i SmartPack – åbner i Shopify">'+esc(o.n)+'<span class="shop-mark"> (Shopify)</span></a>';
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf = n => Math.round(n).toLocaleString('da-DK');
@@ -387,7 +396,7 @@ $('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?'
 if (alderMin >= 120) $('#fresh').classList.add('gammel');
 $('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
   'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Presell-ordrer findes ud fra lagertallene (samme regel som Mechanic, men uafhængigt af tags): en vare er presell, når den ikke ligger på en hylde, eller når der er reserveret flere, end der er på lager ('+nf(D.forsalg_ordrer)+' ordrer). '+
-  'Tallene hentes fra SmartPack og Shopify hver halve time mellem kl. 6 og 22, og siden henter selv de nye tal.';
+  'Tallene hentes fra SmartPack og Shopify hver halve time mellem kl. 6 og 22, og siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack; står der (Shopify), er ordren ikke fundet i SmartPack og åbner i Shopify.';
 
 // Tilstand
 const state = { tab:'prio', span:null, q:'', sort:{k:'aeldst',dir:1}, bare:false };
@@ -412,7 +421,7 @@ function poKort(p){
      (p.note?'<p class="po-fullnote">'+esc(p.note)+'</p>':'')+
      '<div><h4>Ventende ordrer ('+ord.length+')</h4>'+
        (ord.length?'<div class="scroll"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th class="r">Stk</th></tr></thead><tbody>'+
-         ord.map(o=>'<tr><td><a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.single?'<span class="smalltag">Singleline</span>':'')+o.pak.map(t=>'<span class="smalltag">'+esc(t)+'</span>').join('')+'</td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="r num">'+o.stk+'</td></tr>').join('')+
+         ord.map(o=>'<tr><td>'+ordA(o)+(o.single?'<span class="smalltag">Singleline</span>':'')+o.pak.map(t=>'<span class="smalltag">'+esc(t)+'</span>').join('')+'</td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="r num">'+o.stk+'</td></tr>').join('')+
          '</tbody></table></div>':'<p class="hint" style="margin:0">Ingen presell-ordrer venter på denne forsendelse.</p>')+
      '</div>'+
      '<div><h4>Varer der mangler ('+linjer.length+' linjer)</h4><div class="scroll"><table><thead><tr><th>Vare</th><th>Str.</th><th class="r">Mangler</th><th class="r">I ordrer</th></tr></thead><tbody>'+
@@ -471,7 +480,7 @@ function visUden(){
   const u = D.uden_po.filter(o=>!q || (o.n+' '+o.skus.join(' ')).toLowerCase().includes(q));
   return '<p class="hint">Ordrer med presell-varer, hvor ingen af dem ligger på en åben PO. Varen er måske kommet hjem, eller den mangler at blive bestilt. Tjek dem.</p>'+
    (u.length?'<div class="scroll" style="max-height:none"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th>Varer (SKU)</th></tr></thead><tbody>'+
-   u.map(o=>'<tr><td><a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a></td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="sku">'+o.skus.map(esc).join('<br>')+'</td></tr>').join('')+
+   u.map(o=>'<tr><td>'+ordA(o)+'</td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="sku">'+o.skus.map(esc).join('<br>')+'</td></tr>').join('')+
    '</tbody></table></div>':'<div class="empty">Ingen ordrer matcher.</div>');
 }
 
@@ -494,7 +503,7 @@ function visFlyt(){
     '<div><b class="num">'+nf(flytPresell)+'</b><span>af ordrerne venter også på presell</span></div></div>';
   const kort = x => {
     const img = x.img ? '<img src="'+esc(x.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="72" height="72">' : '<div class="noimg">intet billede</div>';
-    const ord = x.ordrer.map(o=>'<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
+    const ord = x.ordrer.map(o=>ordA(o)+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
     return '<div class="flytvare">'+img+
       '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
       '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.hel_stk)+' stk i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
@@ -525,7 +534,7 @@ function visButik(){
     '<div><b class="num">'+nf(butikSenere)+'</b><span>stk senere – ordren venter også på presell</span></div></div>';
   const kort = x => {
     const img = x.img ? '<img src="'+esc(x.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="72" height="72">' : '<div class="noimg">intet billede</div>';
-    const ord = x.ordrer.map(o=>'<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.q>1?' ('+o.q+' stk)':'')+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
+    const ord = x.ordrer.map(o=>ordA(o)+(o.q>1?' ('+o.q+' stk)':'')+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
     return '<div class="flytvare">'+img+
       '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
       '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.butik_stk)+' stk i butikken · '+nf(x.lager_stk)+' på Lager Ramløse · '+nf(x.hel_stk)+' i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
