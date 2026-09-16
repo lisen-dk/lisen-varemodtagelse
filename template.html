@@ -377,7 +377,7 @@ const alderMin = Math.round((now - new Date(D.hentet))/60000);
 $('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?' · over '+Math.floor(alderMin/60)+' timer gammel':'');
 if (alderMin >= 120) $('#fresh').classList.add('gammel');
 $('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
-  'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Kun ikke-afsendte webshop-ordrer med tagget Presell (tidligere Forsalg) er med ('+nf(D.forsalg_ordrer)+' stk). '+
+  'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Presell-ordrer findes ud fra lagertallene (samme regel som Mechanic, men uafhængigt af tags): en vare er presell, når den ikke ligger på en hylde, eller når der er reserveret flere, end der er på lager ('+nf(D.forsalg_ordrer)+' ordrer). '+
   'Tallene hentes fra SmartPack og Shopify hver halve time mellem kl. 6 og 22, og siden henter selv de nye tal.';
 
 // Tilstand
@@ -460,7 +460,7 @@ function visVarer(){
 function visUden(){
   const q = state.q;
   const u = D.uden_po.filter(o=>!q || (o.n+' '+o.skus.join(' ')).toLowerCase().includes(q));
-  return '<p class="hint">Ordrer med tagget Presell, hvor ingen af varerne ligger på en åben PO. Varen er måske kommet hjem, eller den mangler at blive bestilt. Tjek dem.</p>'+
+  return '<p class="hint">Ordrer med presell-varer, hvor ingen af dem ligger på en åben PO. Varen er måske kommet hjem, eller den mangler at blive bestilt. Tjek dem.</p>'+
    (u.length?'<div class="scroll" style="max-height:none"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th>Varer (SKU)</th></tr></thead><tbody>'+
    u.map(o=>'<tr><td><a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a></td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="sku">'+o.skus.map(esc).join('<br>')+'</td></tr>').join('')+
    '</tbody></table></div>':'<div class="empty">Ingen ordrer matcher.</div>');
@@ -493,7 +493,7 @@ function visFlyt(){
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
   };
-  return sum+'<p class="hint">Samme regel som tagget FlereLagre i Shopify: ordren har mindst én vare, der kun ligger i Helsinge, og mindst én, der kun ligger i Ramløse (lager eller butik). Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
+  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren har mindst én vare, der kun ligger i Helsinge, og mindst én, der kun ligger i Ramløse (lager eller butik). Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
 }
 
