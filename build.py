@@ -130,7 +130,9 @@ def hent_sp_ordrer():
 
 
 def hent_lager():
-    """sku -> [[hyldenavn, antal, flag]] fra SmartPacks lagerliste. Flag: R = retur, K = karantæne."""
+    """sku -> [[hyldenavn, antal, flag]] fra SmartPacks lagerliste. Flag K = karantæne.
+
+    Returvarer, der er sat på en almindelig hylde, er almindeligt lager (SmartPack plukker dem)."""
     if TEST_DIR:
         rows = json.load(open(os.path.join(TEST_DIR, "stock.json")))
     else:
@@ -139,7 +141,7 @@ def hent_lager():
     for r in rows:
         if (r.get("location") or "normal") != "normal":
             continue
-        flag = "R" if r.get("isReturn") else ("K" if r.get("quarantine") else "")
+        flag = "K" if r.get("quarantine") else ""
         pl[r.get("sku") or ""][(r.get("placementName") or "", flag)] += float(r.get("quantity") or 0)
     return {sku: [[navn, tal(antal), flag] for (navn, flag), antal in d.items()] for sku, d in pl.items()}
 
@@ -212,7 +214,10 @@ def tal(x):
 
 
 def gid_id(g):
-    return (g or "").rsplit("/", 1)[-1]
+    """Shopify-gid ("gid://shopify/X/123") -> "123". Alt andet (SmartPack-id, SKU) returneres uændret –
+    SKU'er kan indeholde "/"."""
+    g = str(g or "")
+    return g.rsplit("/", 1)[-1] if g.startswith("gid://") else g
 
 
 def navn_farve(produktnavn):
@@ -230,12 +235,14 @@ def omraade(hylde):
     return "lager"
 
 
+VENTER_PAA_VARER = {"WaitingForStock", "OutOfStock"}
+
+
 def klassificer(o):
     """Samme logik som Mechanic-opgaven "Lagertags på ordrer" – men beregnet her, uafhængigt af tags.
 
     Hver ikke-afsendt linje er enten
-      - presell: varen ligger ikke på nogen hylde, eller der er reserveret flere stk., end der er
-        på lager (res > tot), eller
+      - presell: SmartPack melder, at linjen venter på varer (WaitingForStock / OutOfStock), eller
       - lager:   med antal på Lager Ramløse, i butikken og i Helsinge.
     Butikken er sidste mulighed: en linje tæller kun som "Ramløse" via butikken, hvis varen
     hverken ligger på Lager Ramløse eller i Helsinge.
@@ -243,7 +250,9 @@ def klassificer(o):
       - PAK_Ramløse   alle lagerlinjer kan tages i Ramløse (har forrang)
       - PAK_Helsinge  ellers, hvis alle lagerlinjer kan tages i Helsinge
       - FlereLagre    ellers – varer uden for Lager Ramløse flyttes fra Helsinge
-    Retur/karantæne og totes tæller ikke som lager.
+    Karantæne og returkasser (Tote Retur…) tæller ikke som lager. Varer i andre kasser
+    (KlarTilPak, ButikOut, Modtagelse …) er i Ramløse. Kender vi ingen placering for en vare,
+    som SmartPack har klar, regnes den som Ramløse.
     """
     linjer, antal_stk = [], 0
     for li in (o.get("lineItems") or {}).get("nodes") or []:
@@ -258,7 +267,7 @@ def klassificer(o):
         for r in p.get("pl") or []:
             navn, antal, flag = (list(r) + [None, None, None])[:3]
             antal = tal(antal)
-            if flag or antal <= 0 or (navn or "").startswith("Tote"):
+            if flag or antal <= 0 or (navn or "").startswith("Tote Retur"):
                 continue
             omr = omraade(navn or "")
             stk[omr] += antal
@@ -267,12 +276,17 @@ def klassificer(o):
             elif omr == "butik":
                 butik_hylder.append([navn, antal])
         ramlose = stk["lager"] + stk["butik"]
-        presell = tal(p.get("res")) > tal(p.get("tot")) or (ramlose <= 0 and stk["helsinge"] <= 0)
+        sp_state = li.get("sp_state")
+        if sp_state:
+            presell = sp_state in VENTER_PAA_VARER
+        else:  # ældre dataformat uden SmartPack-linjestatus
+            presell = tal(p.get("res")) > tal(p.get("tot")) or (ramlose <= 0 and stk["helsinge"] <= 0)
+        ukendt_sted = ramlose <= 0 and stk["helsinge"] <= 0
         linjer.append({"li": li, "v": v, "vid": gid_id(v.get("id")), "sku": li.get("sku") or "", "q": q,
                        "presell": presell, "ramlose": ramlose, "hel": stk["helsinge"], "hylder": hel_hylder,
                        "lager_stk": stk["lager"], "butik_stk": stk["butik"], "butik_hylder": butik_hylder,
                        # butikken bruges kun, når varen hverken er på Lager Ramløse eller i Helsinge
-                       "kan_r": stk["lager"] > 0 or (stk["butik"] > 0 and stk["helsinge"] <= 0)})
+                       "kan_r": stk["lager"] > 0 or ukendt_sted or (stk["butik"] > 0 and stk["helsinge"] <= 0)})
     lager = [l for l in linjer if not l["presell"]]
     pak = ""
     if lager:
@@ -389,17 +403,18 @@ def beregn(raw_po, raw_ordrer):
             "godkendt": bool(p.get("approved")), "linjer": linjer,
         })
 
-    # variant -> PO'er med presell, der ikke er leveret (tidligste først)
+    # vare -> åbne PO'er med varen, der ikke er leveret. Presell-markerede PO-linjer først,
+    # derefter øvrige – hver gruppe tidligste først.
     var_po = collections.defaultdict(list)
     info = {}
     for p in pos:
         for l in p["linjer"]:
             if l["vid"]:
                 info.setdefault(l["vid"], l)
-            if l["ps"] and l["mangler"] > 0 and l["vid"]:
-                var_po[l["vid"]].append((p["dato"], p["id"]))
-    for v in var_po.values():
-        v.sort()
+            if l["mangler"] > 0 and l["vid"]:
+                var_po[l["vid"]].append((0 if l["ps"] else 1, p["dato"], p["id"]))
+    for vid in var_po:
+        var_po[vid] = [(d, pid) for _, d, pid in sorted(var_po[vid])]
     po_by_id = {p["id"]: p for p in pos}
     ps_paa_po = collections.Counter()
     for p in pos:

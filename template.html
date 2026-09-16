@@ -406,7 +406,7 @@ const alderMin = Math.round((now - new Date(D.hentet))/60000);
 $('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?' · over '+Math.floor(alderMin/60)+' timer gammel':'');
 if (alderMin >= 120) $('#fresh').classList.add('gammel');
 $('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
-  'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Presell-ordrer findes ud fra lagertallene (samme regel som Mechanic, men uafhængigt af tags): en vare er presell, når den ikke ligger på en hylde, eller når der er reserveret flere, end der er på lager ('+nf(D.forsalg_ordrer)+' ordrer). '+
+  'En ordre tælles under den tidligste åbne PO med den bestilte vare (PO-linjer markeret presell først). Presell-ordrer er ordrer med varer, som SmartPack selv melder, at de venter på ("venter på lager" eller "udsolgt") – '+nf(D.forsalg_ordrer)+' ordrer. '+
   'Alle tal hentes direkte fra SmartPack og opdateres, når SmartPack melder ændringer (og mindst hver halve time). Siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack.';
 
 // Tilstand
@@ -489,7 +489,7 @@ function visVarer(){
 function visUden(){
   const q = state.q;
   const u = D.uden_po.filter(o=>!q || (o.n+' '+o.skus.join(' ')).toLowerCase().includes(q));
-  return '<p class="hint">Ordrer med presell-varer, hvor ingen af dem ligger på en åben PO. Varen er måske kommet hjem, eller den mangler at blive bestilt. Tjek dem.</p>'+
+  return '<p class="hint">Ordrer med varer, som SmartPack melder udsolgt eller venter på, og som ikke er på nogen åben PO. Varen mangler sandsynligvis at blive bestilt.</p>'+
    (u.length?'<div class="scroll" style="max-height:none"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th>Varer (SKU)</th></tr></thead><tbody>'+
    u.map(o=>'<tr><td>'+ordA(o)+'</td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="sku">'+o.skus.map(esc).join('<br>')+'</td></tr>').join('')+
    '</tbody></table></div>':'<div class="empty">Ingen ordrer matcher.</div>');
@@ -522,7 +522,7 @@ function visFlyt(){
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
   };
-  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren kan hverken pakkes samlet på Lager Ramløse eller i Helsinge. Butikken bruges kun til varer, der ikke findes på nogen af de to lagre. Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
+  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren kan hverken pakkes samlet på Lager Ramløse eller i Helsinge. Butikken bruges kun til varer, der ikke findes på nogen af de to lagre. Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Karantæne og returkasser tæller ikke som lager; returvarer på hylder og varer i andre kasser gør.</p>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
 }
 
@@ -553,7 +553,7 @@ function visButik(){
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.nu)+'</b><span>stk hentes nu</span>'+(x.senere_butik?'<small>+ '+nf(x.senere_butik)+' senere</small>':'')+'</div></div>';
   };
-  return '<div class="butik-vis">'+sum+'<p class="hint">Butikken er sidste mulighed: så længe en vare kan plukkes på Lager Ramløse eller Lager Helsinge, tages den der. Listen viser kun det, som de to lagre ikke kan dække, og som derfor skal hentes ud af butikken til webshop-ordrer. Ordrer, der kan pakkes nu, går forud for ordrer, der også venter på presell. Retur, karantæne og totes tæller ikke som lager.</p>'+
+  return '<div class="butik-vis">'+sum+'<p class="hint">Butikken er sidste mulighed: så længe en vare kan plukkes på Lager Ramløse eller Lager Helsinge, tages den der. Listen viser kun det, som de to lagre ikke kan dække, og som derfor skal hentes ud af butikken til webshop-ordrer. Ordrer, der kan pakkes nu, går forud for ordrer, der også venter på presell. Karantæne og returkasser tæller ikke som lager; returvarer på hylder og varer i andre kasser gør.</p>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(B.length?'Ingen varer matcher søgningen.':'Ingen varer skal hentes i butikken lige nu.')+'</div>')+'</div>';
 }
 
