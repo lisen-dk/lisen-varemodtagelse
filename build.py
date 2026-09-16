@@ -13,7 +13,8 @@ der har varianten på presell.
 Flere lagre: samme regel som Mechanic-opgaven "Lagertags på ordrer" (FlereLagre/FLYT_LAGER):
 en ordre kan hverken pakkes samlet i Ramløse (lager + butik) eller i Helsinge. De varer på
 sådanne ordrer, der KUN ligger i Helsinge, skal flyttes til Ramløse – de samles på en flytteliste.
-Retur/karantæne og totes tæller ikke som lager. Linjer uden lager (presell) tæller ikke med.
+Retur/karantæne og totes tæller ikke som lager. Linjer uden lager (presell) tæller ikke med –
+det gør linjer heller ikke, hvor der er reserveret flere stk., end der er på lager (res > tot).
 
 Resultatet krypteres med adgangskoden (AES-GCM, nøgle fra PBKDF2) og skrives ind i
 site/index.html, som GitHub Pages viser. Uden adgangskoden kan siden ikke læses.
@@ -217,6 +218,9 @@ def beregn_flyt(raw_ordrer):
             if q <= 0 or not v:
                 continue
             p = ((v.get("personale") or {}).get("jsonValue")) or {}
+            if tal(p.get("res")) > tal(p.get("tot")):
+                venter = True  # lageret er lovet væk til andre ordrer
+                continue
             stk = {"lager": 0, "butik": 0, "helsinge": 0}
             hel_hylder = []
             for r in p.get("pl") or []:
