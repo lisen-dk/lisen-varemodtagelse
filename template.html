@@ -80,7 +80,6 @@ h1 small{display:block;font-size:12px;font-weight:600;letter-spacing:.14em;color
 .flyt-band span{font-size:13px;color:var(--ink2)}
 .flyt-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--flyt)}
 .flyt-band .gaa{margin-left:auto;font-weight:700;font-size:13px;color:var(--link)}
-.shop-mark{font-size:.85em;color:var(--ink3)}
 .flyt-band.butik-band{border-left-color:var(--butik)}
 .flyt-band.butik-band:hover{border-color:var(--butik)}
 .flyt-band.butik-band .tag{color:var(--butik)}
@@ -295,23 +294,35 @@ document.getElementById('logud').addEventListener('click', () => {
   gem(NOEGLE, null); try { sessionStorage.removeItem(NOEGLE); } catch(e){}
   location.reload();
 });
-// Hent nye tal automatisk: siden genindlæses hvert 10. minut, når den er synlig.
-let sidst = Date.now();
-setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - sidst > 10*60e3 && !document.querySelector('details.po[open]') && !document.activeElement.matches('input')) location.reload(); }, 60e3);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - sidst > 10*60e3) location.reload(); });
+// Hent nye tal automatisk: hver minut tjekkes, om der er udgivet en ny version af siden.
+// Genindlæs kun, når der er nye tal, og ingen er i gang med at søge eller kigge i en PO.
+let version = null;
+async function nyVersion() {
+  try {
+    const r = await fetch(location.pathname, {method: 'HEAD', cache: 'no-store'});
+    const v = r.headers.get('last-modified') || r.headers.get('etag');
+    if (!v) return false;
+    if (version === null) { version = v; return false; }
+    return v !== version;
+  } catch(e) { return false; }
+}
+async function tjek() {
+  if (document.visibilityState !== 'visible') return;
+  if (document.querySelector('details.po[open]') || document.activeElement.matches('input')) return;
+  if (await nyVersion()) location.reload();
+}
+nyVersion();
+setInterval(tjek, 60e3);
+document.addEventListener('visibilitychange', tjek);
 aabn();
 
 function vis(D){
 document.getElementById('app').hidden = false;
 const SP_PO = id => 'https://lisen.smartpack.dk/admin/customers/PurchaseOrders/Form?id=9d9288cc-5982-4339-bf14-639183815195&purchaseOrder=' + id;
-const SH_ORD = id => 'https://admin.shopify.com/store/lisendk/orders/' + id;
-// Ordrer åbner i SmartPack; findes ordren ikke dér (endnu), åbner den i Shopify
+// Ordrenumre åbner ordren i SmartPack
 const SP_ORD = id => 'https://lisen.smartpack.dk/admin/customers/orders/info?orderId=' + encodeURIComponent(id);
 function ordA(o){
-  const sp = (D.sp || {})[o.id];
-  return sp != null
-    ? '<a href="'+SP_ORD(sp)+'" target="_blank" rel="noopener" title="Åbn i SmartPack">'+esc(o.n)+'</a>'
-    : '<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener" title="Ikke fundet i SmartPack – åbner i Shopify">'+esc(o.n)+'<span class="shop-mark"> (Shopify)</span></a>';
+  return '<a href="'+SP_ORD(o.id)+'" target="_blank" rel="noopener" title="Åbn i SmartPack">'+esc(o.n)+'</a>';
 }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -396,7 +407,7 @@ $('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?'
 if (alderMin >= 120) $('#fresh').classList.add('gammel');
 $('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
   'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Presell-ordrer findes ud fra lagertallene (samme regel som Mechanic, men uafhængigt af tags): en vare er presell, når den ikke ligger på en hylde, eller når der er reserveret flere, end der er på lager ('+nf(D.forsalg_ordrer)+' ordrer). '+
-  'Tallene hentes fra SmartPack og Shopify hver halve time mellem kl. 6 og 22, og siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack; står der (Shopify), er ordren ikke fundet i SmartPack og åbner i Shopify.';
+  'Alle tal hentes direkte fra SmartPack og opdateres, når SmartPack melder ændringer (og mindst hver halve time). Siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack.';
 
 // Tilstand
 const state = { tab:'prio', span:null, q:'', sort:{k:'aeldst',dir:1}, bare:false };

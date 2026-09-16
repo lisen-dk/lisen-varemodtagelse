@@ -2,13 +2,14 @@
 """
 Varemodtagelse – overblik over åbne indkøbsordrer for lager og kundeservice.
 
-Henter
-  1. åbne indkøbsordrer (PO'er) fra SmartPack
-  2. alle åbne, ikke (fuldt) afsendte webshop-ordrer fra Shopify med varernes hyldeplaceringer
-     (metafeltet lisen.personale, sat af SmartPack presell-sync)
+Alt hentes direkte fra SmartPack (ingen Shopify-kald):
+  1. åbne indkøbsordrer (PO'er)                 purchaseorder/list
+  2. alle åbne ordrer inkl. ordrelinjer          order/list
+  3. hyldeplaceringer for hele lageret           stock/list
+  4. varedetaljer (navn, billede, total/reserveret) for ordrernes varer   item/list
 
 Ordrerne klassificeres her med samme logik som Mechanic-opgaven "Lagertags på ordrer"
-(se klassificer) – dashboardet afhænger IKKE af, om ordrerne er tagget i Shopify.
+(se klassificer) – dashboardet afhænger ikke af tags.
 
 Presell: ordrer med mindst én presell-linje; linjerne kobles til den tidligste åbne PO,
 der har varianten på presell.
@@ -24,9 +25,9 @@ Resultatet krypteres med adgangskoden (AES-GCM, nøgle fra PBKDF2) og skrives in
 site/index.html, som GitHub Pages viser. Uden adgangskoden kan siden ikke læses.
 
 Miljøvariabler (GitHub secrets):
-  SMARTPACK_APP_ID, SMARTPACK_TOKEN, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET,
-  DASHBOARD_PASSWORD
-Test uden netværk: TEST_DIR=mappe med po.json (SmartPack-format) og orders.json (Shopify-noder).
+  SMARTPACK_APP_ID, SMARTPACK_TOKEN, DASHBOARD_PASSWORD
+Test uden netværk: TEST_DIR=mappe med po.json, sp_orders.json, stock.json og items.json
+(samme format som SmartPacks API-svar).
 
 Loggen skriver kun antal – aldrig ordrenumre eller varedata (repoet kan være offentligt).
 """
@@ -46,8 +47,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-SHOP = "lisendk.myshopify.com"
-API_VERSION = "2026-07"
 SP_BASE = "https://lisen.smartpack.dk/api/v1"
 PBKDF2_ITER = 310000
 # Fast salt: så husker enhederne adgangen, indtil adgangskoden skiftes.
@@ -96,134 +95,113 @@ def sp_get(path):
     }))
 
 
-def hent_po():
-    if TEST_DIR:
-        return json.load(open(os.path.join(TEST_DIR, "po.json")))
-    path, out, sider = "/purchaseorder/list?state=2&pageSize=500", [], 0
-    while path and sider < 50:
+def sp_sider(path, maks=60):
+    """Alle sider af en SmartPack-liste (følger nextPage; SmartPack giver højst 300 pr. side)."""
+    out, sider, set_ids = [], 0, set()
+    while path and sider < maks:
         d = sp_get(path)
-        out += d.get("data") or []
-        path = d.get("nextPage")
+        data = d.get("data") or []
+        nye = [x for x in data if x.get("id") is None or x.get("id") not in set_ids]
+        if not nye:
+            break
+        set_ids.update(x.get("id") for x in nye)
+        out += nye
+        nxt = d.get("nextPage") or ""
+        path = nxt.split("/api/v1", 1)[1] if "/api/v1" in nxt else nxt
         sider += 1
     return out
 
 
-# Åbne SmartPack-ordrer (alt andet end Pakket og Annulleret), så dashboardet kan linke til SmartPack
-SP_ORDRE_STATES = "0,1,2,3,4,-5,-10,-20"
-SP_SIDE = 500
+def hent_po():
+    if TEST_DIR:
+        return json.load(open(os.path.join(TEST_DIR, "po.json")))
+    return sp_sider("/purchaseorder/list?state=2&pageSize=300")
+
+
+# Åbne ordrer: alt andet end Pakket (5) og Annulleret (6).
+# -30 er ikke dokumenteret af SmartPack, men indeholder ordrer, der venter på presell-varer.
+SP_ORDRE_STATES = "0,1,2,3,4,-5,-10,-20,-30"
 
 
 def hent_sp_ordrer():
-    """[(smartpack-id, ordrenummer, externalId)] for åbne ordrer. Fejler det, linker siden til Shopify."""
     if TEST_DIR:
-        f = os.path.join(TEST_DIR, "sp_orders.json")
-        return json.load(open(f)) if os.path.exists(f) else []
-    out, fuld, forrige = [], 0, None
-    try:
-        for side in range(1, 61):
-            d = sp_get(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize={SP_SIDE}&p={side}")
-            data = d.get("data") or []
-            if not data or data[0].get("id") == forrige:
-                break
-            forrige = data[0].get("id")
-            out += [[x.get("id"), x.get("orderNo") or "", str(x.get("externalId") or "")] for x in data]
-            fuld = fuld or len(data)  # SmartPack giver højst 300 pr. side, uanset pageSize
-            if len(data) < fuld:
-                break
-    except Exception as e:  # noqa: BLE001 – links er en bekvemmelighed, siden skal stadig bygges
-        log(f"SmartPack-ordrer kunne ikke hentes ({type(e).__name__}) – ordrer linker til Shopify")
-    return out
+        return json.load(open(os.path.join(TEST_DIR, "sp_orders.json")))
+    return sp_sider(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize=300&p=1")
 
 
-def sp_links(raw_ordrer, sp_ordrer):
-    """{shopify-ordre-id: smartpack-id} for de åbne Shopify-ordrer, der findes i SmartPack."""
-    efter_nr, efter_ext = {}, {}
-    for sid, nr, ext in sp_ordrer:
-        if sid is None:
-            continue
-        efter_nr.setdefault(nr.lstrip("#").strip(), sid)
-        if ext:
-            efter_ext.setdefault(ext, sid)
-    ud = {}
-    for o in raw_ordrer:
-        oid = gid_id(o.get("id"))
-        sid = efter_nr.get((o.get("name") or "").lstrip("#").strip()) or efter_ext.get(oid)
-        if sid is not None:
-            ud[oid] = sid
-    return ud
-
-
-# ---------------------------------------------------------------- Shopify
-
-_token = None
-
-
-def shopify_token():
-    global _token
-    if _token is None:
-        data = urllib.parse.urlencode({
-            "grant_type": "client_credentials",
-            "client_id": os.environ["SHOPIFY_CLIENT_ID"],
-            "client_secret": os.environ["SHOPIFY_CLIENT_SECRET"],
-        }).encode()
-        r = json.loads(http(f"https://{SHOP}/admin/oauth/access_token", data=data,
-                            headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST"))
-        _token = r["access_token"]
-    return _token
-
-
-def gql(query, variables=None, tries=8):
-    url = f"https://{SHOP}/admin/api/{API_VERSION}/graphql.json"
-    body = json.dumps({"query": query, "variables": variables or {}}).encode()
-    for n in range(tries):
-        r = json.loads(http(url, data=body, method="POST", headers={
-            "Content-Type": "application/json", "X-Shopify-Access-Token": shopify_token()}))
-        errors = r.get("errors") or []
-        if any((e.get("extensions") or {}).get("code") == "THROTTLED" for e in errors):
-            time.sleep(min(30, 2 ** n))
-            continue
-        if errors:
-            koder = sorted({(e.get("extensions") or {}).get("code") or "?" for e in errors})
-            if "ACCESS_DENIED" in koder:
-                raise RuntimeError("Shopify-appen mangler adgangen read_orders (se vejledningen).")
-            raise RuntimeError(f"GraphQL-fejl: {koder} {json.dumps(errors)[:300]}")
-        t = ((r.get("extensions") or {}).get("cost") or {}).get("throttleStatus") or {}
-        if t and t.get("currentlyAvailable", 1000) < 300:
-            time.sleep(2)
-        return r["data"]
-    raise RuntimeError("GraphQL: for mange THROTTLED-svar")
-
-
-ORDRE_Q = """
-query($after: String) {
-  orders(first: 20, after: $after, sortKey: CREATED_AT,
-         query: "status:open AND (fulfillment_status:unfulfilled OR fulfillment_status:partial)") {
-    pageInfo { hasNextPage endCursor }
-    nodes {
-      id name createdAt tags sourceName
-      lineItems(first: 30) {
-        nodes {
-          sku name unfulfilledQuantity currentQuantity
-          image { url(transform: {maxWidth: 120, maxHeight: 120}) }
-          variant { id title personale: metafield(namespace: "lisen", key: "personale") { jsonValue } }
-        }
-      }
-    }
-  }
-}"""
-
-
-def hent_ordrer():
+def hent_lager():
+    """sku -> [[hyldenavn, antal, flag]] fra SmartPacks lagerliste. Flag: R = retur, K = karantæne."""
     if TEST_DIR:
-        return json.load(open(os.path.join(TEST_DIR, "orders.json")))
-    out, after = [], None
-    for _ in range(1000):
-        d = gql(ORDRE_Q, {"after": after})["orders"]
-        out += d["nodes"]
-        if not d["pageInfo"]["hasNextPage"]:
-            break
-        after = d["pageInfo"]["endCursor"]
-    return out
+        rows = json.load(open(os.path.join(TEST_DIR, "stock.json")))
+    else:
+        rows = sp_get("/stock/list").get("data") or []
+    pl = collections.defaultdict(lambda: collections.defaultdict(float))
+    for r in rows:
+        if (r.get("location") or "normal") != "normal":
+            continue
+        flag = "R" if r.get("isReturn") else ("K" if r.get("quarantine") else "")
+        pl[r.get("sku") or ""][(r.get("placementName") or "", flag)] += float(r.get("quantity") or 0)
+    return {sku: [[navn, tal(antal), flag] for (navn, flag), antal in d.items()] for sku, d in pl.items()}
+
+
+def hent_varer(skus):
+    """sku -> varedetaljer (navn, størrelse, billede, total/reserveret) for de varer, ordrerne indeholder."""
+    if TEST_DIR:
+        rows = json.load(open(os.path.join(TEST_DIR, "items.json")))
+    else:
+        rows, skus = [], sorted(s for s in skus if s)
+        pakke, laengde = [], 0
+        def hent(pakke):
+            q = urllib.parse.quote(",".join(pakke), safe="")
+            return sp_sider(f"/item/list?includeDetails=true&pageSize=300&p=1&skus={q}", maks=5)
+        for s in skus:
+            if pakke and (len(pakke) >= 100 or laengde + len(s) > 3000):
+                rows += hent(pakke)
+                pakke, laengde = [], 0
+            pakke.append(s)
+            laengde += len(s) + 1
+        if pakke:
+            rows += hent(pakke)
+    return {r.get("sku"): r for r in rows if r.get("sku")}
+
+
+def lille_billede(url):
+    """Shopify-CDN-billeder hentes i thumbnail-størrelse."""
+    if url and "cdn.shopify.com" in url and "width=" not in url:
+        return url + ("&" if "?" in url else "?") + "width=120"
+    return url or ""
+
+
+def sp_til_noder(sp_ordrer, lager, varer):
+    """SmartPack-ordrer i det interne format, som klassificeringen bruger."""
+    noder = []
+    for o in sp_ordrer:
+        if o.get("isReturn") or o.get("exclude"):
+            continue
+        linjer = []
+        for it in o.get("items") or []:
+            if it.get("type") != 0:          # fragt, gebyrer o.l.
+                continue
+            sku = (it.get("sku") or "").strip()
+            v = varer.get(sku) or {}
+            qty = tal(it.get("qty"))
+            leveret = it.get("_StateDescription") == "Delivered"
+            rest = 0 if leveret else max(0, qty - tal(it.get("shippedQty")))
+            produkt = v.get("productName") or it.get("description") or sku
+            str_ = v.get("variantName") or ""
+            linjer.append({
+                "sku": sku, "name": produkt + (" - " + str_ if str_ else ""),
+                "currentQuantity": qty, "unfulfilledQuantity": rest,
+                "image": {"url": lille_billede(v.get("imageUrl") or it.get("imageUrl"))},
+                "sp_state": it.get("_StateDescription") or "",
+                "variant": {"id": sku, "title": str_, "personale": {"jsonValue": {
+                    "tot": tal(v.get("totalCombined")), "res": tal(v.get("reservedCombined")),
+                    "pl": lager.get(sku) or []}}},
+            })
+        noder.append({"id": str(o.get("id")), "name": o.get("orderNo") or str(o.get("id")),
+                      "createdAt": o.get("orderDate") or "", "sourceName": "", "sp_state": o.get("state"),
+                      "lineItems": {"nodes": linjer}})
+    return noder
 
 
 # ---------------------------------------------------------------- beregning
@@ -396,7 +374,7 @@ def beregn(raw_po, raw_ordrer):
             it = l.get("item") or {}
             navn, farve = navn_farve(it.get("productName"))
             linjer.append({
-                "sku": (l.get("sku") or "").strip(), "vid": str(it.get("externalId") or ""),
+                "sku": (l.get("sku") or "").strip(), "vid": (l.get("sku") or "").strip(),
                 "qty": tal(l.get("qty")), "lev": tal(l.get("deliveredQty")),
                 "under": tal(l.get("beingDeliveredQty")), "mangler": tal(l.get("undeliveredQty")),
                 "ps": bool(l.get("preSell")), "navn": navn, "farve": farve,
@@ -522,13 +500,16 @@ def main():
 
     raw_po = hent_po()
     log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer")
-    raw_ordrer = hent_ordrer()
-    log(f"Shopify: {len(raw_ordrer)} åbne, ikke afsendte ordrer")
+    sp_ordrer = hent_sp_ordrer()
+    lager = hent_lager()
+    skus = {(it.get("sku") or "").strip() for o in sp_ordrer for it in (o.get("items") or []) if it.get("type") == 0}
+    skus |= {(l.get("sku") or "").strip() for p in raw_po for l in (p.get("items") or [])}
+    varer = hent_varer(skus)
+    raw_ordrer = sp_til_noder(sp_ordrer, lager, varer)
+    log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
+        f"{len(varer)} af {len(skus)} varer med detaljer")
 
     d = beregn(raw_po, raw_ordrer)
-    sp_ordrer = hent_sp_ordrer()
-    d["sp"] = sp_links(raw_ordrer, sp_ordrer)
-    log(f"SmartPack-ordrer: {len(sp_ordrer)} åbne · {len(d['sp'])} af {len(raw_ordrer)} Shopify-ordrer linker til SmartPack")
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
