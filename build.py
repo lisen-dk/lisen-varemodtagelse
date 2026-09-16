@@ -51,6 +51,8 @@ SP_BASE = "https://lisen.smartpack.dk/api/v1"
 PBKDF2_ITER = 310000
 # Fast salt: så husker enhederne adgangen, indtil adgangskoden skiftes.
 SALT = b"lisen-varemodtagelse/v1"
+# Cloudflare-Workeren, som dashboardet sender datoændringer til
+WORKER_URL = os.environ.get("WORKER_URL") or "https://lisen-varemodtagelse.lone-c5f.workers.dev"
 TEST_DIR = os.environ.get("TEST_DIR")
 HER = os.path.dirname(os.path.abspath(__file__))
 UD = os.path.join(HER, "site")
@@ -115,7 +117,8 @@ def sp_sider(path, maks=60):
 def hent_po():
     if TEST_DIR:
         return json.load(open(os.path.join(TEST_DIR, "po.json")))
-    return sp_sider("/purchaseorder/list?state=2&pageSize=300")
+    # 1 = kladde, 2 = åben (bestilt hos leverandøren)
+    return sp_sider("/purchaseorder/list?state=1,2&pageSize=300")
 
 
 # Åbne ordrer: alt andet end Pakket (5) og Annulleret (6).
@@ -465,6 +468,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
                 "under": tal(l.get("beingDeliveredQty")), "mangler": tal(l.get("undeliveredQty")),
                 "ps": bool(l.get("preSell")), "navn": navn, "farve": farve,
                 "str": it.get("variantName") or "", "maerke": it.get("manufacturerName") or "",
+                "pris": float(l.get("unitPrice") or l.get("price") or 0),
             })
         pos.append({
             "id": p["id"], "ref": (p.get("referenceNo") or "").strip(),
@@ -473,6 +477,8 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
             "dato": (p.get("expectedDeliveryDate") or p.get("orderDate") or "")[:10],
             "note": (p.get("note") or "").replace("\r\n", "\n").strip(),
             "godkendt": bool(p.get("approved")), "linjer": linjer,
+            "kladde": p.get("state") == 1, "valuta": p.get("orderCurrency") or "DKK",
+            "tracking": [t for t in (p.get("trackingNumbers") or []) if t][:5] if isinstance(p.get("trackingNumbers"), list) else [],
         })
 
     # vare -> åbne PO'er med varen, der ikke er leveret. Presell-markerede PO-linjer først,
@@ -483,7 +489,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
         for l in p["linjer"]:
             if l["vid"]:
                 info.setdefault(l["vid"], l)
-            if l["mangler"] > 0 and l["vid"]:
+            if l["mangler"] > 0 and l["vid"] and not p["kladde"]:   # kladder er ikke bestilt endnu
                 var_po[l["vid"]].append((0 if l["ps"] else 1, p["dato"], p["id"]))
     for vid in var_po:
         var_po[vid] = [(d, pid) for _, d, pid in sorted(var_po[vid])]
@@ -542,7 +548,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
     ud_po = []
     for p in pos:
         mangler = [l for l in p["linjer"] if l["mangler"] > 0]
-        if not mangler:
+        if not mangler or p["kladde"]:
             continue
         ud_po.append({
             "id": p["id"], "ref": p["ref"], "lev": p["lev"], "bestilt": p["bestilt"], "dato": p["dato"],
@@ -557,6 +563,27 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
                         "stk": l["mangler"], "ps": l["ps"], "img": billede(l["sku"]),
                         "vent": po_linje_vent[p["id"]].get(l["vid"], 0)} for l in mangler],
             "ordrer": sorted(po_ord.get(p["id"], {}).values(), key=lambda x: x["t"]),
+        })
+
+    alle_po = []
+    for p in pos:
+        L = p["linjer"]
+        vent = po_linje_vent.get(p["id"], {})
+        img = next((billede(l["sku"]) for l in L if billede(l["sku"])), "")
+        maerker = collections.Counter(l["maerke"] for l in L if l["maerke"])
+        alle_po.append({
+            "id": p["id"], "ref": p["ref"], "lev": p["lev"], "note": p["note"],
+            "maerker": [m for m, _ in maerker.most_common()],
+            "bestilt": p["bestilt"], "dato": p["dato"], "kladde": p["kladde"], "godkendt": p["godkendt"],
+            "linjer": len(L), "varer": len({l["sku"] for l in L}),
+            "bestilt_stk": tal(sum(l["qty"] for l in L)), "modtaget": tal(sum(l["lev"] for l in L)),
+            "under": tal(sum(l["under"] for l in L)), "mangler": tal(sum(l["mangler"] for l in L)),
+            "ps": tal(sum(l["mangler"] for l in L if l["ps"])),
+            "ps_linjer": sum(1 for l in L if l["ps"] and l["mangler"] > 0),
+            "solgt": tal(sum(vent.values())), "ordrer": len(po_ord.get(p["id"], {})),
+            "vaerdi": round(sum(l["qty"] * l["pris"] for l in L)),
+            "vaerdi_mangler": round(sum(l["mangler"] * l["pris"] for l in L)),
+            "valuta": p["valuta"], "tracking": p["tracking"], "img": img,
         })
 
     varer = []
@@ -574,7 +601,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
 
     return {
         "hentet": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "po": ud_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
+        "po": ud_po, "alle_po": alle_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
         "flyt": beregn_flyt(klass),
         "butik": beregn_butik(klass),
         "kun_hel": beregn_kun_helsinge(lager or {}, detaljer or {}, klass),
@@ -623,7 +650,7 @@ def main():
         sys.exit("DASHBOARD_PASSWORD mangler eller er kortere end 6 tegn.")
 
     raw_po = hent_po()
-    log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer")
+    log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer ({sum(1 for p in raw_po if p.get('state') == 1)} kladder)")
     sp_ordrer = hent_sp_ordrer()
     lager = hent_lager()
     skus = {(it.get("sku") or "").strip() for o in sp_ordrer for it in (o.get("items") or []) if it.get("type") == 0}
@@ -650,7 +677,7 @@ def main():
     komprimer_billeder(d)
     blob = krypter(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), adgangskode)
     skabelon = open(os.path.join(HER, "template.html"), encoding="utf-8").read()
-    side = skabelon.replace("__DATA__", json.dumps(blob))
+    side = skabelon.replace("__WORKER__", WORKER_URL).replace("__DATA__", json.dumps(blob))
     os.makedirs(UD, exist_ok=True)
     with open(os.path.join(UD, "index.html"), "w", encoding="utf-8") as f:
         f.write(side)

@@ -3,7 +3,9 @@
 Udruller Cloudflare-Workeren "lisen-varemodtagelse" og tilmelder den som webhook i SmartPack.
 
 Læser nøgler fra noegler.env (i mappen over github-varemodtagelse):
-  SMARTPACK_APP_ID, SMARTPACK_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, GITHUB_TOKEN
+  SMARTPACK_APP_ID, SMARTPACK_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, GITHUB_TOKEN,
+  DASHBOARD_PASSWORD (samme som GitHub-hemmeligheden – bruges til at godkende datoændringer fra
+  dashboardet; skiftes adgangskoden, skal Workeren udrulles igen)
 Webhookens brugernavn/adgangskode oprettes første gang og gemmes i noegler-worker.env.
 
 Brug:  python3 udrul.py            udrul Workeren (og vis adressen)
@@ -11,11 +13,14 @@ Brug:  python3 udrul.py            udrul Workeren (og vis adressen)
        python3 udrul.py status     vis Workerens status
 Skriver aldrig nøgler ud.
 """
-import base64, json, os, secrets, sys, urllib.error, urllib.request, uuid
+import base64, hashlib, json, os, secrets, sys, urllib.error, urllib.request, uuid
 
 HER = os.path.dirname(os.path.abspath(__file__))
 NAVN = "lisen-varemodtagelse"
 REPO = "lisen-dk/lisen-varemodtagelse"
+DASH_ORIGIN = "https://lisen-dk.github.io"
+# Samme afledning som dashboardet (build.py / template.html)
+SALT, ITER = b"lisen-varemodtagelse/v1", 310000
 SCOPES = ["order_updated", "order_state_updated", "item_quantity_updated"]
 
 
@@ -56,7 +61,9 @@ if not W.get("HOOK_PASS"):
 
 
 def http(url, data=None, headers=None, method=None):
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    h = {"User-Agent": "lisen-varemodtagelse/1.0"}
+    h.update(headers or {})
+    req = urllib.request.Request(url, data=data, headers=h, method=method)
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             return r.status, r.read()
@@ -101,6 +108,15 @@ def subdomain():
     return r["result"]["subdomain"]
 
 
+def dash_key():
+    pw = K.get("DASHBOARD_PASSWORD")
+    if not pw:
+        print("Bemærk: DASHBOARD_PASSWORD mangler i noegler.env – datoændring fra dashboardet er slået fra.")
+        return []
+    raw = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), SALT, ITER, 32)
+    return [{"type": "secret_text", "name": "DASH_KEY", "text": base64.b64encode(raw).decode()}]
+
+
 def upload(med_migrering):
     if not K.get("GITHUB_TOKEN"):
         sys.exit("GITHUB_TOKEN mangler i noegler.env")
@@ -113,7 +129,10 @@ def upload(med_migrering):
             {"type": "secret_text", "name": "HOOK_USER", "text": W["HOOK_USER"]},
             {"type": "secret_text", "name": "HOOK_PASS", "text": W["HOOK_PASS"]},
             {"type": "secret_text", "name": "GITHUB_TOKEN", "text": K["GITHUB_TOKEN"]},
-        ],
+            {"type": "plain_text", "name": "DASH_ORIGIN", "text": DASH_ORIGIN},
+            {"type": "secret_text", "name": "SP_APP_ID", "text": K["SMARTPACK_APP_ID"]},
+            {"type": "secret_text", "name": "SP_TOKEN", "text": K["SMARTPACK_TOKEN"]},
+        ] + dash_key(),
         "observability": {"enabled": False},
     }
     if med_migrering:

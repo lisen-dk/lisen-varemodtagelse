@@ -184,6 +184,35 @@ td.thumb{width:48px;padding-right:0}
 .smalltag{font-size:10.5px;font-weight:500;padding:1px 7px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);margin-left:5px;white-space:nowrap}
 .udenvarer{display:flex;flex-direction:column;gap:6px;min-width:240px}
 
+/* Alle PO'er */
+.po-tbl{min-width:1080px}
+.po-tbl td{vertical-align:middle}
+.po-tbl .lev-celle{display:flex;align-items:center;gap:10px;min-width:220px}
+.po-tbl .lev-navn{font-weight:500;font-size:14.5px}
+.po-tbl .brands{font-size:12px;color:var(--ink2);max-width:260px}
+.po-tbl .po-id{font-family:var(--mono);font-size:11.5px;color:var(--ink3);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-tbl td.num{white-space:nowrap}
+.po-tbl .po-id a{color:inherit}
+.po-tbl tr.kladde td{background:color-mix(in srgb,var(--panel2) 70%,transparent)}
+.po-tbl tr.aendret td{background:color-mix(in srgb,var(--today-bg) 70%,transparent)}
+.po-tbl .note{font-size:12.5px;color:var(--ink2);max-width:220px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.fremdrift{display:flex;flex-direction:column;gap:4px;min-width:110px}
+.fremdrift .bar{width:100%}
+.fremdrift .bar .m{background:var(--today)} .fremdrift .bar .u{background:var(--tom)}
+.dato-celle{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:150px}
+.ret{font:inherit;font-size:12px;background:none;border:0;color:var(--link);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.ret-form{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ret-form input[type=date]{font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--accent);border-radius:8px;background:var(--panel);color:var(--ink)}
+.ret-form button{font:inherit;font-size:12.5px;border-radius:99px;padding:4px 11px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink2)}
+.ret-form button.gem{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ret-form button:disabled{opacity:.6;cursor:wait}
+.ret-fejl{flex-basis:100%;font-size:12px;color:var(--late)}
+.ps-tal{font-weight:500}
+.ps-tal.nul{color:var(--ink3);font-weight:400}
+.solgt{color:var(--accent);font-weight:500}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:14px;box-shadow:var(--shadow);z-index:10;max-width:calc(100vw - 32px)}
+.toast.fejl{background:var(--late);color:#fff}
+
 /* Ankomster */
 .days{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .day{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:9px;box-shadow:var(--shadow)}
@@ -256,6 +285,7 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
+    <button role="tab" id="tab-allepo" aria-selected="false" data-tab="allepo">Alle PO'er</button>
     <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
     <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
     <button role="tab" id="tab-uden" aria-selected="false" data-tab="uden">Presell uden PO</button>
@@ -270,6 +300,7 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
   <div id="view"></div>
 
   <footer id="foot"></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
 <script id="data" type="application/json">__DATA__</script>
@@ -277,6 +308,8 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
 (function(){
 const BLOB = JSON.parse(document.getElementById('data').textContent);
 const NOEGLE = 'lv_noegle';
+const WORKER = '__WORKER__';
+let NOEGLE_B64 = null;
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const tilB64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
 const hent = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
@@ -294,7 +327,7 @@ async function dekrypter(raw){
 async function aabn(){
   const gemt = hent(NOEGLE) || (()=>{ try { return sessionStorage.getItem(NOEGLE); } catch(e){ return null; } })();
   if (gemt){
-    try { vis(await dekrypter(b64(gemt))); return; } catch(e){ gem(NOEGLE, null); }
+    try { const D = await dekrypter(b64(gemt)); NOEGLE_B64 = gemt; vis(D); return; } catch(e){ gem(NOEGLE, null); }
   }
   document.getElementById('laas').hidden = false;
   document.getElementById('kode').focus();
@@ -307,6 +340,7 @@ document.getElementById('laasform').addEventListener('submit', async e => {
     const raw = await afled(document.getElementById('kode').value);
     const D = await dekrypter(raw);
     const v = tilB64(raw);
+    NOEGLE_B64 = v;
     if (document.getElementById('husk').checked) gem(NOEGLE, v);
     else { try { sessionStorage.setItem(NOEGLE, v); } catch(_){} }
     document.getElementById('laas').hidden = true;
@@ -476,7 +510,8 @@ function poKort(p){
    '<span class="figs">'+fig(ord.length,'Ordrer','ord')+fig(p.ps,'Presell')+fig(p.stk,'Stk i alt')+'</span></summary>'+
    '<div class="po-body">'+
      '<div class="po-actions"><a class="btn" href="'+SP_PO(p.id)+'" target="_blank" rel="noopener">Åbn PO '+p.id+' i SmartPack ↗</a>'+
-       '<span>Bestilt '+kortDato(p.bestilt)+' · forventet '+kortDato(p.dato)+' · '+nf(p.modtaget)+' af '+nf(p.bestilt_stk)+' stk modtaget</span></div>'+
+       '<span>Bestilt '+kortDato(p.bestilt)+' · '+nf(p.modtaget)+' af '+nf(p.bestilt_stk)+' stk modtaget</span>'+
+       '<span style="display:flex;align-items:center;gap:8px">Forventet '+datoFelt(p)+'</span></div>'+
      (p.note?'<p class="po-fullnote">'+esc(p.note)+'</p>':'')+
      '<div><h4>Ventende ordrer ('+ord.length+')</h4>'+
        (ord.length?'<div class="scroll"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th class="r">Stk</th></tr></thead><tbody>'+
@@ -497,6 +532,110 @@ function visPrio(){
   return '<div class="tools" style="margin-top:-6px">'+chips+'</div>'+
     '<p class="hint">Fersken-farvet nummer = forsendelsen har kunder, der venter. Pak den ud først. Klik en forsendelse for at se ordrer og varer.</p>'+
     (liste.length?'<div class="polist">'+liste.map(poKort).join('')+'</div>':'<div class="empty">Ingen forsendelser matcher.</div>');
+}
+
+// ---------- Alle PO'er ----------
+const AP = D.alle_po || [];
+AP.forEach(p => {
+  if (/^0?$/.test(p.ref)) p.ref = '';
+  p.soeg = [p.id,p.ref,p.lev,p.note,p.maerker.join(' '),p.tracking.join(' ')].join(' ').toLowerCase();
+});
+const aendrede = new Set();
+let redigerer = null;          // PO-id, hvis datoen er ved at blive rettet
+let redigerFejl = '';
+let gemmer = false;
+const kr = n => nf(n) + ' kr';
+const apFiltre = {alle:'Alle', presell:'Med presell', solgt:'Solgt på presell', forsinket:'Forsinkede', kladder:'Kladder'};
+state.apFilter = 'alle';
+state.apSort = {k:'dato', dir:1};
+
+function datoFelt(p){
+  if (redigerer === p.id){
+    return '<div class="ret-form" data-po-form="'+p.id+'">'+
+      '<input type="date" id="ret-dato-'+p.id+'" value="'+esc(p.dato)+'" aria-label="Ny forventet dato for PO '+p.id+'">'+
+      '<button type="button" class="gem" data-gem-dato="'+p.id+'"'+(gemmer?' disabled':'')+'>'+(gemmer?'Gemmer …':'Gem')+'</button>'+
+      '<button type="button" data-annuller-dato'+(gemmer?' disabled':'')+'>Annullér</button>'+
+      (redigerFejl?'<span class="ret-fejl">'+esc(redigerFejl)+'</span>':'')+'</div>';
+  }
+  return '<div class="dato-celle">'+datoBadge(p.dato)+(aendrede.has(p.id)?'<span class="smalltag">ændret</span>':'')+
+    '<button type="button" class="ret" data-ret-dato="'+p.id+'">Ret dato</button></div>';
+}
+
+function visAllePO(){
+  const q = state.q, f = state.apFilter;
+  let v = AP.filter(p => (!q || p.soeg.includes(q)) &&
+    (f==='alle' || (f==='presell' && p.ps>0) || (f==='solgt' && p.solgt>0) || (f==='kladder' && p.kladde) || (f==='forsinket' && !p.kladde && spand(p.dato)==='late')));
+  const {k, dir} = state.apSort;
+  v.sort((a,b)=>{ const A=a[k], B=b[k]; const c = typeof A==='number' ? A-B : String(A).localeCompare(String(B),'da'); return (c || a.dato.localeCompare(b.dato) || a.id-b.id)*dir; });
+  const sum = (arr,key) => arr.reduce((a,p)=>a+p[key],0);
+  const aabne = AP.filter(p=>!p.kladde);
+  const kort = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(aabne.length)+'</b><span>åbne PO\'er'+(AP.length>aabne.length?' + '+(AP.length-aabne.length)+' kladder':'')+'</span></div>'+
+    '<div><b class="num">'+nf(sum(aabne,'mangler'))+'</b><span>stk mangler at blive leveret</span></div>'+
+    '<div><b class="num">'+nf(sum(aabne,'ps'))+'</b><span>stk er lagt på presell</span></div>'+
+    '<div><b class="num">'+nf(sum(aabne,'solgt'))+'</b><span>stk er solgt på presell</span></div>'+
+    '<div><b class="num">'+kr(sum(aabne,'vaerdi_mangler'))+'</b><span>udestående værdi (indkøb)</span></div></div>';
+  const chips = '<div class="knaprad">'+Object.entries(apFiltre).map(([key,l])=>'<button type="button" class="filter-knap" data-ap-filter="'+key+'" aria-pressed="'+(f===key)+'">'+l+'</button>').join('')+'</div>';
+  const th = (key,label,r) => '<th class="'+(r?'r':'')+'"><button data-ap-sort="'+key+'">'+label+(k===key?(dir>0?' ↑':' ↓'):'')+'</button></th>';
+  const raekke = p => {
+    const pct = x => p.bestilt_stk ? (x/p.bestilt_stk*100) : 0;
+    return '<tr class="'+(p.kladde?'kladde':'')+(aendrede.has(p.id)?' aendret':'')+'">'+
+      '<td><div class="lev-celle">'+tn(p.img)+'<div><div class="lev-navn">'+esc(p.lev||'Ukendt leverandør')+'</div>'+
+        (p.maerker.length && (p.maerker.length>1 || p.maerker[0].toLowerCase()!==(p.lev||'').toLowerCase())?'<div class="brands">'+esc(p.maerker.slice(0,4).join(', '))+(p.maerker.length>4?' …':'')+'</div>':'')+
+        '<div class="po-id" title="'+esc(p.ref)+'"><a href="'+SP_PO(p.id)+'" target="_blank" rel="noopener">PO '+p.id+'</a>'+(p.ref?' · '+esc(p.ref):'')+'</div></div></div></td>'+
+      '<td class="num">'+(p.bestilt?kortDato(p.bestilt):'–')+'</td>'+
+      '<td>'+datoFelt(p)+'</td>'+
+      '<td>'+(p.kladde?'<span class="badge b-wait">Kladde</span>':'<span class="badge b-later">Bestilt</span>')+
+        (p.godkendt?' <span class="badge b-today">Godkendt</span>':'')+(p.under?'<div class="sku" style="margin-top:4px">'+nf(p.under)+' under modtagelse</div>':'')+'</td>'+
+      '<td><div class="fremdrift"><span class="num">'+nf(p.modtaget)+' / '+nf(p.bestilt_stk)+' stk</span>'+
+        '<div class="bar"><i class="m" style="width:'+pct(p.modtaget)+'%"></i><i class="u" style="width:'+pct(p.under)+'%"></i></div>'+
+        '<span class="sku">'+nf(p.varer)+' varer · '+nf(p.mangler)+' mangler</span></div></td>'+
+      '<td class="r"><span class="ps-tal num'+(p.ps?'':' nul')+'">'+(p.ps?nf(p.ps)+' stk':'–')+'</span>'+(p.ps?'<div class="sku">'+p.ps_linjer+' varer</div>':'')+'</td>'+
+      '<td class="r">'+(p.solgt?'<span class="solgt num">'+nf(p.solgt)+' stk</span><div class="sku">'+p.ordrer+' ordrer</div>':'<span class="ps-tal nul">–</span>')+'</td>'+
+      '<td class="r num">'+kr(p.vaerdi_mangler)+(p.vaerdi!==p.vaerdi_mangler?'<div class="sku">af '+kr(p.vaerdi)+'</div>':'')+'</td>'+
+      '<td>'+(p.note?'<div class="note" title="'+esc(p.note)+'">'+esc(p.note)+'</div>':'')+'</td></tr>';
+  };
+  return kort+chips+
+    '<p class="hint">Alle åbne indkøbsordrer i SmartPack. "Solgt på presell" er stk i kundeordrer, der venter på netop denne PO. Klik "Ret dato" for at ændre den forventede leveringsdato – ændringen gemmes direkte i SmartPack.</p>'+
+    (v.length?'<div class="scroll varer-tbl" style="max-height:none"><table class="po-tbl"><thead><tr>'+
+      th('lev','Leverandør / brand')+th('bestilt','Bestilt')+th('dato','Forventet')+'<th>Status</th>'+th('mangler','Leveret')+th('ps','Presell',1)+th('solgt','Solgt på presell',1)+th('vaerdi_mangler','Udestående',1)+'<th>Note</th>'+
+      '</tr></thead><tbody>'+v.map(raekke).join('')+'</tbody></table></div>':'<div class="empty">Ingen PO\'er matcher.</div>');
+}
+
+let toastTmr;
+function toast(tekst, fejl){
+  const t = $('#toast'); t.textContent = tekst; t.className = 'toast'+(fejl?' fejl':''); t.hidden = false;
+  clearTimeout(toastTmr); toastTmr = setTimeout(()=>{ t.hidden = true; }, fejl?8000:6000);
+}
+
+async function hmacHex(noegleB64, besked){
+  const k = await crypto.subtle.importKey('raw', b64(noegleB64), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+  const s = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(besked));
+  return [...new Uint8Array(s)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function gemDato(id){
+  const input = document.getElementById('ret-dato-'+id);
+  const dato = input && input.value;
+  const p = AP.find(x=>x.id===id);
+  if (!dato || !/^\d{4}-\d{2}-\d{2}$/.test(dato)){ redigerFejl = 'Vælg en dato.'; render(); return; }
+  if (p && dato === p.dato){ redigerer = null; redigerFejl = ''; render(); return; }
+  if (!NOEGLE_B64){ redigerFejl = 'Log ud og ind igen for at kunne gemme.'; render(); return; }
+  gemmer = true; redigerFejl = ''; render();
+  try {
+    const t = Date.now();
+    const sig = await hmacHex(NOEGLE_B64, 'po-dato|'+id+'|'+dato+'|'+t);
+    const r = await fetch(WORKER+'/po/dato', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id, dato, t, sig})});
+    let svar = {}; try { svar = await r.json(); } catch(_){}
+    if (!r.ok || !svar.ok) throw new Error(svar.fejl || ('Fejl '+r.status));
+    [AP, D.po].forEach(liste => liste.forEach(x => { if (x.id===id){ x.dato = dato; if ('s' in x) x.s = spand(dato); } }));
+    aendrede.add(id); redigerer = null; gemmer = false;
+    render();
+    toast('PO '+id+': forventet dato ændret til '+kortDato(dato)+(svar.gammel?' (før '+kortDato(svar.gammel)+')':'')+'. Resten af dashboardet opdateres om et par minutter.');
+  } catch(err){
+    gemmer = false; redigerFejl = err.message || 'Kunne ikke gemme.';
+    render();
+  }
 }
 
 function visDage(){
@@ -639,13 +778,22 @@ function render(){
   $('#stats').innerHTML = statsHtml();
   document.querySelectorAll('nav.tabs button').forEach(b=>{
     const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
+    const c = {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
     b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
   });
-  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
+  const rd = e.target.closest('[data-ret-dato]');
+  if (rd){ redigerer = +rd.dataset.retDato; redigerFejl = ''; render(); const i = document.getElementById('ret-dato-'+redigerer); if (i){ i.focus(); try{ i.showPicker && i.showPicker(); }catch(_){} } return; }
+  if (e.target.closest('[data-annuller-dato]')){ redigerer = null; redigerFejl = ''; render(); return; }
+  const gd = e.target.closest('[data-gem-dato]');
+  if (gd){ gemDato(+gd.dataset.gemDato); return; }
+  const af = e.target.closest('[data-ap-filter]');
+  if (af){ state.apFilter = af.dataset.apFilter; render(); return; }
+  const as = e.target.closest('[data-ap-sort]');
+  if (as){ const k = as.dataset.apSort; state.apSort = state.apSort.k===k ? {k, dir:-state.apSort.dir} : {k, dir: (k==='lev'||k==='dato'||k==='bestilt')?1:-1}; render(); return; }
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
   if (e.target.closest('#alle-lok')){ alleLok = !alleLok; if (!alleLok) aabneLok.clear(); render(); return; }
   const s = e.target.closest('[data-span]');
@@ -661,6 +809,12 @@ document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]');
   if (g){ state.tab='prio'; state.span=null; state.q=''; $('#q').value=''; render();
     const el = document.querySelector('details[data-po="'+g.dataset.goto+'"]'); if(el){ el.open=true; el.scrollIntoView({block:'start',behavior:'smooth'}); } }
+});
+document.addEventListener('keydown', e=>{
+  const f = e.target.closest && e.target.closest('[data-po-form]');
+  if (!f) return;
+  if (e.key === 'Enter'){ e.preventDefault(); gemDato(+f.dataset.poForm); }
+  if (e.key === 'Escape'){ redigerer = null; redigerFejl = ''; render(); }
 });
 let tmr; $('#q').addEventListener('input', e=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ state.q=e.target.value.trim().toLowerCase(); render(); },120); });
 render();
