@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
+<title>Lisen Varemodtagelse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eef0ef; --panel:#ffffff; --panel2:#f6f7f6; --ink:#15191a; --ink2:#4b5456; --ink3:#7b8587;
+  --line:#d5dad9; --line2:#e5e9e8;
+  --accent:#0f5e6b; --accent-ink:#ffffff; --link:#0d5a8a;
+  --tape:#f6c343; --tape-ink:#2a2105;
+  --late:#b3261e; --late-bg:#fbe7e5; --today:#0f6b3a; --today-bg:#e0f3e7; --tom:#8a5a00; --tom-bg:#fbf0d6; --later-bg:#eceff0;
+  --shadow:0 1px 2px rgba(20,30,30,.06),0 4px 14px rgba(20,30,30,.05);
+  --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101415; --panel:#181e1f; --panel2:#1e2527; --ink:#e7ecec; --ink2:#a9b3b4; --ink3:#7d888a;
+  --line:#2c3537; --line2:#242c2e; --accent:#5fc0cf; --accent-ink:#06282d; --link:#79b8e6;
+  --tape:#e0b23c; --tape-ink:#1f1803;
+  --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}}
+:root[data-theme="dark"]{
+  --bg:#101415; --panel:#181e1f; --panel2:#1e2527; --ink:#e7ecec; --ink2:#a9b3b4; --ink3:#7d888a;
+  --line:#2c3537; --line2:#242c2e; --accent:#5fc0cf; --accent-ink:#06282d; --link:#79b8e6;
+  --tape:#e0b23c; --tape-ink:#1f1803;
+  --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;margin:0;padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:1180px;margin:0 auto}
+a{color:var(--link)}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono)}
+.num{font-variant-numeric:tabular-nums}
+
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding-block:28px 18px}
+h1{font-stretch:78%;font-weight:800;font-size:clamp(28px,5vw,40px);line-height:1;margin:0;letter-spacing:-.01em;text-transform:uppercase}
+h1 small{display:block;font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--ink3);margin-bottom:6px;font-stretch:100%}
+.fresh{font-family:var(--mono);font-size:12px;color:var(--ink2);background:var(--panel);border:1px dashed var(--line);padding:6px 10px;border-radius:4px}
+.fresh b{color:var(--tom)}
+
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit;display:flex;flex-direction:column;gap:2px;position:relative}
+.stat[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.stat .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.stat .lbl i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.stat .big{font-stretch:80%;font-weight:800;font-size:32px;line-height:1.05}
+.stat .sub{font-size:12.5px;color:var(--ink2)}
+.stat .sub b{color:var(--ink)}
+.s-late .lbl{color:var(--late)} .s-late .lbl i{background:var(--late)}
+.s-today .lbl{color:var(--today)} .s-today .lbl i{background:var(--today)}
+.s-tom .lbl{color:var(--tom)} .s-tom .lbl i{background:var(--tom)}
+.s-later .lbl{color:var(--ink2)} .s-later .lbl i{background:var(--ink3)}
+
+.presell-band{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:center;background:var(--tape);color:var(--tape-ink);border-radius:6px;padding:10px 14px;margin-bottom:22px;
+  background-image:repeating-linear-gradient(-45deg,transparent 0 14px,rgba(0,0,0,.035) 14px 28px)}
+.presell-band div{display:flex;align-items:baseline;gap:6px}
+.presell-band b{font-stretch:80%;font-weight:800;font-size:22px}
+.presell-band span{font-size:13px}
+.presell-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase}
+
+nav.tabs{display:flex;gap:4px;border-bottom:2px solid var(--ink);margin-bottom:14px;overflow-x:auto}
+nav.tabs button{font:inherit;font-weight:700;font-size:14px;background:none;border:0;padding:9px 14px;color:var(--ink2);cursor:pointer;border-radius:5px 5px 0 0;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+nav.tabs button .c{font-family:var(--mono);font-weight:500;font-size:12px;opacity:.75;margin-left:4px}
+
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.tools input[type=search]{flex:1 1 260px;min-width:0;font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink)}
+.chip{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink2);padding:6px 10px;border-radius:99px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.hint{font-size:13px;color:var(--ink3);margin:-4px 0 14px}
+
+/* PO-kort */
+.polist{display:flex;flex-direction:column;gap:8px}
+.po{background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);overflow:hidden}
+.po>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 14px 12px 0}
+.po>summary::-webkit-details-marker{display:none}
+.rank{align-self:stretch;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:15px;color:var(--ink3);border-right:1px solid var(--line2)}
+.po.har-ordrer .rank{background:var(--tape);color:var(--tape-ink);border-right:0;
+  background-image:repeating-linear-gradient(-45deg,transparent 0 8px,rgba(0,0,0,.05) 8px 16px)}
+.po-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-width:0}
+.po-h .lev{font-weight:800;font-size:17px;font-stretch:85%}
+.po-h .ref{font-family:var(--mono);font-size:13px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-h .id{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.po-note{flex-basis:100%;font-size:13px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.02em;white-space:nowrap}
+.b-late{background:var(--late-bg);color:var(--late)} .b-today{background:var(--today-bg);color:var(--today)}
+.b-tom{background:var(--tom-bg);color:var(--tom)} .b-later{background:var(--later-bg);color:var(--ink2)}
+.b-ps{background:var(--tape);color:var(--tape-ink)}
+.b-wait{background:var(--panel2);color:var(--ink3);border:1px solid var(--line)}
+.figs{display:flex;gap:18px;text-align:right}
+.fig{display:flex;flex-direction:column;min-width:54px}
+.fig b{font-stretch:80%;font-weight:800;font-size:22px;line-height:1.1}
+.fig span{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.fig.ord b{color:var(--late)}
+.fig.zero b{color:var(--ink3);font-weight:600}
+.po-body{border-top:1px solid var(--line2);padding:14px 16px 16px 70px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px}
+.po-body h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.po-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13.5px}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:700;padding:7px 12px;border-radius:5px;font-size:13.5px}
+.po-fullnote{grid-column:1/-1;white-space:pre-wrap;font-size:13.5px;background:var(--panel2);border-left:3px solid var(--line);padding:8px 12px;margin:0}
+.scroll{overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line2);border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{position:sticky;top:0;background:var(--panel2);text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+td.r,th.r{text-align:right}
+tr.vent td{background:color-mix(in srgb,var(--tape) 16%,transparent)}
+.sku{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.age{font-family:var(--mono);font-size:12px}
+.age.gl{color:var(--late);font-weight:600}
+.smalltag{font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);margin-left:4px;white-space:nowrap}
+
+/* Ankomster */
+.days{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.day{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.day h3{margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px}
+.day h3 .n{font-family:var(--mono);font-size:13px;color:var(--ink2);font-weight:500;white-space:nowrap}
+.day li button{min-width:0;display:flex;flex-direction:column}
+.day li .rf{font-family:var(--mono);font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.day li>span{white-space:nowrap}
+.day.late{border-color:var(--late)} .day.today{border-color:var(--today);box-shadow:inset 0 0 0 1px var(--today)}
+.day ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.day li{display:flex;justify-content:space-between;gap:8px;font-size:13.5px}
+.day li button{font:inherit;background:none;border:0;padding:0;color:var(--link);cursor:pointer;text-align:left}
+.bar{height:6px;border-radius:3px;background:var(--line2);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bar .p{background:var(--tape)} .bar .o{background:var(--ink3)}
+
+.varer-tbl th button{font:inherit;background:none;border:0;color:inherit;cursor:pointer;padding:0;letter-spacing:inherit;text-transform:inherit}
+.varer-tbl .scroll{max-height:none}
+.empty{padding:24px;text-align:center;color:var(--ink3);background:var(--panel);border:1px dashed var(--line);border-radius:6px}
+footer{margin-top:28px;font-size:12.5px;color:var(--ink3);max-width:70ch}
+
+@media (max-width:760px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .po>summary{grid-template-columns:40px minmax(0,1fr);padding-right:12px}
+  .figs{grid-column:2;justify-content:flex-start;text-align:left}
+  .po-body{grid-template-columns:1fr;padding-left:14px}
+  .stat .big{font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+
+/* Lås */
+.laas{min-height:100vh;display:flex;align-items:center;justify-content:center;padding-block:40px}
+.laas form{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:26px 24px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow)}
+.laas h1{font-size:30px}
+.laas label{font-size:13px;font-weight:700;color:var(--ink2);display:flex;flex-direction:column;gap:6px}
+.laas input[type=password]{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);color:var(--ink)}
+.laas .husk{flex-direction:row;align-items:center;gap:8px;font-weight:500}
+.laas button{font:inherit;font-weight:800;background:var(--ink);color:var(--bg);border:0;border-radius:5px;padding:11px;cursor:pointer}
+.laas .fejl{color:var(--late);font-size:13.5px;margin:0}
+.laas .tape{height:10px;border-radius:3px;background:var(--tape);background-image:repeating-linear-gradient(-45deg,transparent 0 8px,rgba(0,0,0,.08) 8px 16px)}
+.topknap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lille{font:inherit;font-size:12.5px;background:none;border:1px solid var(--line);color:var(--ink2);border-radius:4px;padding:5px 9px;cursor:pointer}
+.fresh.gammel{border-color:var(--late);color:var(--late)}
+</style>
+</head>
+<body>
+<div class="laas" id="laas" hidden>
+  <form id="laasform" autocomplete="on">
+    <div class="tape"></div>
+    <h1><small>Lisen.dk · lager &amp; kundeservice</small>Varemodtagelse</h1>
+    <input type="text" name="username" value="varemodtagelse" autocomplete="username" hidden>
+    <label for="kode">Adgangskode
+      <input type="password" id="kode" name="password" autocomplete="current-password" required></label>
+    <label class="husk" for="husk"><input type="checkbox" id="husk" checked> Husk mig på denne enhed</label>
+    <p class="fejl" id="fejl" hidden>Forkert adgangskode. Prøv igen.</p>
+    <button type="submit" id="aabn">Åbn</button>
+  </form>
+</div>
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <h1><small>Lisen.dk · lager &amp; kundeservice</small>Varemodtagelse</h1>
+    <div class="topknap"><div class="fresh" id="fresh"></div><button class="lille" id="logud" type="button">Log ud</button></div>
+  </header>
+
+  <section class="stats" id="stats" aria-label="Indkøbsordrer efter forventet levering"></section>
+  <section class="presell-band" id="band" aria-label="Presell"></section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
+    <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
+    <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
+    <button role="tab" id="tab-uden" aria-selected="false" data-tab="uden">Presell uden PO</button>
+  </nav>
+
+  <div class="tools" id="tools">
+    <input type="search" id="q" placeholder="Søg på PO-nummer, leverandør, varenavn, SKU eller ordrenummer" aria-label="Søg">
+  </div>
+  <div id="view"></div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function(){
+const BLOB = JSON.parse(document.getElementById('data').textContent);
+const NOEGLE = 'lv_noegle';
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const tilB64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+const hent = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+const gem = (k,v) => { try { v==null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch(e){} };
+async function afled(kode){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(kode), 'PBKDF2', false, ['deriveBits']);
+  return crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt:b64(BLOB.salt), iterations:BLOB.iter}, base, 256);
+}
+async function dekrypter(raw){
+  const k = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  const gz = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(BLOB.iv)}, k, b64(BLOB.ct));
+  const tekst = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(tekst);
+}
+async function aabn(){
+  const gemt = hent(NOEGLE) || (()=>{ try { return sessionStorage.getItem(NOEGLE); } catch(e){ return null; } })();
+  if (gemt){
+    try { vis(await dekrypter(b64(gemt))); return; } catch(e){ gem(NOEGLE, null); }
+  }
+  document.getElementById('laas').hidden = false;
+  document.getElementById('kode').focus();
+}
+document.getElementById('laasform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const knap = document.getElementById('aabn'), fejl = document.getElementById('fejl');
+  knap.disabled = true; knap.textContent = 'Åbner …'; fejl.hidden = true;
+  try {
+    const raw = await afled(document.getElementById('kode').value);
+    const D = await dekrypter(raw);
+    const v = tilB64(raw);
+    if (document.getElementById('husk').checked) gem(NOEGLE, v);
+    else { try { sessionStorage.setItem(NOEGLE, v); } catch(_){} }
+    document.getElementById('laas').hidden = true;
+    vis(D);
+  } catch(err) {
+    fejl.hidden = false; knap.disabled = false; knap.textContent = 'Åbn';
+    document.getElementById('kode').select();
+  }
+});
+document.getElementById('logud').addEventListener('click', () => {
+  gem(NOEGLE, null); try { sessionStorage.removeItem(NOEGLE); } catch(e){}
+  location.reload();
+});
+// Hent nye tal automatisk: siden genindlæses hvert 10. minut, når den er synlig.
+let sidst = Date.now();
+setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - sidst > 10*60e3 && !document.querySelector('details.po[open]') && !document.activeElement.matches('input')) location.reload(); }, 60e3);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - sidst > 10*60e3) location.reload(); });
+aabn();
+
+function vis(D){
+document.getElementById('app').hidden = false;
+const SP_PO = id => 'https://lisen.smartpack.dk/admin/customers/PurchaseOrders/Form?id=9d9288cc-5982-4339-bf14-639183815195&purchaseOrder=' + id;
+const SH_ORD = id => 'https://admin.shopify.com/store/lisendk/orders/' + id;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = n => Math.round(n).toLocaleString('da-DK');
+const MDR = ['jan.','feb.','mar.','apr.','maj','jun.','jul.','aug.','sep.','okt.','nov.','dec.'];
+const DAGE = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag'];
+const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+let now = new Date();
+const I_DAG = iso(now);
+const I_MORGEN = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
+const OM_7 = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate()+7));
+const pd = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); };
+const kortDato = s => { const d = pd(s); return d.getDate()+'. '+MDR[d.getMonth()]; };
+const dagNavn = s => DAGE[pd(s).getDay()];
+const dageSiden = s => Math.floor((now - new Date(s)) / 864e5);
+const dageMellem = (a,b) => Math.round((pd(b)-pd(a))/864e5);
+
+function spand(dato){
+  if (dato < I_DAG) return 'late';
+  if (dato === I_DAG) return 'today';
+  if (dato === I_MORGEN) return 'tom';
+  return 'later';
+}
+function datoBadge(dato){
+  const s = spand(dato);
+  let t;
+  if (s==='late'){ const n = dageMellem(dato, I_DAG); t = 'Forsinket '+n+' '+(n===1?'dag':'dage')+' · '+kortDato(dato); }
+  else if (s==='today') t = 'I dag';
+  else if (s==='tom') t = 'I morgen';
+  else t = dagNavn(dato).slice(0,3)+'. '+kortDato(dato);
+  return '<span class="badge b-'+s+'">'+esc(t)+'</span>';
+}
+function alderTxt(t){
+  const n = dageSiden(t);
+  return '<span class="age'+(n>=7?' gl':'')+'">'+(n<=0?'i dag':n+' d')+'</span>';
+}
+
+// Prioritering: forsendelser med ventende presell-ordrer først, ældste ordre først.
+D.po.forEach(p => {
+  if (/^0?$/.test(p.ref)) p.ref = '';
+  p.aeldst = p.ordrer.length ? p.ordrer[0].t : null;
+  p.ord_stk = p.ordrer.reduce((a,o)=>a+o.stk,0);
+  p.s = spand(p.dato);
+  p.soeg = [p.id,p.ref,p.lev,p.note,p.maerker.join(' '),...p.linjer.map(l=>l.sku+' '+l.navn),...p.ordrer.map(o=>o.n)].join(' ').toLowerCase();
+});
+const prio = D.po.slice().sort((a,b)=>{
+  const ga = a.ordrer.length?0:(a.ps>0?1:2), gb = b.ordrer.length?0:(b.ps>0?1:2);
+  if (ga!==gb) return ga-gb;
+  if (ga===0){ if (a.aeldst!==b.aeldst) return a.aeldst<b.aeldst?-1:1; return b.ordrer.length-a.ordrer.length; }
+  return a.dato<b.dato?-1:a.dato>b.dato?1:0;
+});
+prio.forEach((p,i)=>p.rank=i+1);
+
+// Topfelter
+const spaender = {late:'Forsinket',today:'I dag',tom:'I morgen',later:'Senere'};
+function statsHtml(){
+  return Object.keys(spaender).map(k=>{
+    const ps = D.po.filter(p=>p.s===k);
+    const stk = ps.reduce((a,p)=>a+p.stk,0), fs = ps.reduce((a,p)=>a+p.ps,0), ord = new Set(ps.flatMap(p=>p.ordrer.map(o=>o.id))).size;
+    return '<button class="stat s-'+k+'" data-span="'+k+'" aria-pressed="'+(state.span===k)+'">'+
+      '<span class="lbl"><i></i>'+spaender[k]+'</span>'+
+      '<span class="big num">'+nf(stk)+' <small style="font-size:14px;font-weight:600">stk</small></span>'+
+      '<span class="sub">'+ps.length+' forsendelse'+(ps.length===1?'':'r')+' · <b>'+nf(fs)+'</b> på presell</span>'+
+      '<span class="sub"><b>'+nf(ord)+'</b> ventende ordre'+(ord===1?'':'r')+'</span></button>';
+  }).join('');
+}
+const _u = new Set(); D.po.forEach(p=>p.ordrer.forEach(o=>_u.add(o.id)));
+const venterIalt = _u.size;
+const venterStk = D.po.reduce((a,p)=>a+p.ord_stk,0);
+const psPaaVej = D.po.reduce((a,p)=>a+p.ps,0);
+const aeldsteAlle = D.po.filter(p=>p.aeldst).map(p=>p.aeldst).sort()[0];
+$('#band').innerHTML =
+  '<span class="tag">Presell</span>'+
+  '<div><b class="num">'+nf(venterIalt)+'</b><span>kundeordrer venter på presell-varer</span></div>'+
+  '<div><b class="num">'+nf(venterStk)+'</b><span>stk solgt på presell, ikke sendt</span></div>'+
+  '<div><b class="num">'+nf(psPaaVej)+'</b><span>stk på åbne PO\'er er lagt på presell</span></div>'+
+  (aeldsteAlle?'<div><b class="num">'+dageSiden(aeldsteAlle)+' dage</b><span>har den ældste ordre ventet</span></div>':'');
+
+const fmtTid = s => { const d = new Date(s); return d.getDate()+'. '+MDR[d.getMonth()]+' kl. '+String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0'); };
+const alderMin = Math.round((now - new Date(D.hentet))/60000);
+$('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?' · over '+Math.floor(alderMin/60)+' timer gammel':'');
+if (alderMin >= 120) $('#fresh').classList.add('gammel');
+$('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
+  'En ordre tælles under den tidligste åbne PO, der har den bestilte variant på presell. Kun ikke-afsendte webshop-ordrer med tagget Presell (tidligere Forsalg) er med ('+nf(D.forsalg_ordrer)+' stk). '+
+  'Tallene hentes fra SmartPack og Shopify hver halve time mellem kl. 6 og 22, og siden henter selv de nye tal.';
+
+// Tilstand
+const state = { tab:'prio', span:null, q:'', sort:{k:'aeldst',dir:1}, bare:false };
+try { const t = localStorage.getItem('lv_tab'); if (t) state.tab = t; } catch(e){}
+
+function poKort(p){
+  const linjer = p.linjer.slice().sort((a,b)=>(b.vent-a.vent)||(b.ps-a.ps)||a.navn.localeCompare(b.navn,'da'));
+  const ord = p.ordrer;
+  const fig = (v,l,cls) => '<span class="fig '+(cls||'')+(v?'':' zero')+'"><b class="num">'+nf(v)+'</b><span>'+l+'</span></span>';
+  return '<details class="po'+(ord.length?' har-ordrer':'')+'" data-po="'+p.id+'">'+
+   '<summary><span class="rank">'+p.rank+'</span>'+
+   '<span class="po-h"><span class="lev">'+esc(p.lev)+'</span>'+(p.ref?'<span class="ref">'+esc(p.ref)+'</span>':'')+'<span class="id">PO '+p.id+'</span>'+datoBadge(p.dato)+
+     (p.under?'<span class="badge b-today">Under modtagelse: '+nf(p.under)+' stk</span>':'')+
+     (ord.length?'<span class="badge b-late">Ældste ordre '+dageSiden(p.aeldst)+' d</span>':'')+
+     (p.maerker.length && (p.maerker.length>1 || p.maerker[0].toLowerCase()!==p.lev.toLowerCase())?'<span class="badge b-wait">'+esc(p.maerker.join(', '))+'</span>':'')+
+     (p.note?'<span class="po-note">'+esc(p.note.split('\n')[0])+'</span>':'')+
+   '</span>'+
+   '<span class="figs">'+fig(ord.length,'Ordrer','ord')+fig(p.ps,'Presell')+fig(p.stk,'Stk i alt')+'</span></summary>'+
+   '<div class="po-body">'+
+     '<div class="po-actions"><a class="btn" href="'+SP_PO(p.id)+'" target="_blank" rel="noopener">Åbn PO '+p.id+' i SmartPack ↗</a>'+
+       '<span>Bestilt '+kortDato(p.bestilt)+' · forventet '+kortDato(p.dato)+' · '+nf(p.modtaget)+' af '+nf(p.bestilt_stk)+' stk modtaget</span></div>'+
+     (p.note?'<p class="po-fullnote">'+esc(p.note)+'</p>':'')+
+     '<div><h4>Ventende ordrer ('+ord.length+')</h4>'+
+       (ord.length?'<div class="scroll"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th class="r">Stk</th></tr></thead><tbody>'+
+         ord.map(o=>'<tr><td><a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.single?'<span class="smalltag">Singleline</span>':'')+o.pak.map(t=>'<span class="smalltag">'+esc(t)+'</span>').join('')+'</td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="r num">'+o.stk+'</td></tr>').join('')+
+         '</tbody></table></div>':'<p class="hint" style="margin:0">Ingen presell-ordrer venter på denne forsendelse.</p>')+
+     '</div>'+
+     '<div><h4>Varer der mangler ('+linjer.length+' linjer)</h4><div class="scroll"><table><thead><tr><th>Vare</th><th>Str.</th><th class="r">Mangler</th><th class="r">I ordrer</th></tr></thead><tbody>'+
+       linjer.map(l=>'<tr class="'+(l.vent?'vent':'')+'"><td>'+esc(l.navn)+(l.farve?' · '+esc(l.farve):'')+(l.ps?'<span class="smalltag">presell</span>':'')+'<div class="sku">'+esc(l.sku)+'</div></td><td>'+esc(l.str)+'</td><td class="r num">'+nf(l.stk)+'</td><td class="r num">'+(l.vent?'<b>'+l.vent+'</b>':'–')+'</td></tr>').join('')+
+     '</tbody></table></div></div>'+
+   '</div></details>';
+}
+
+function visPrio(){
+  const q = state.q;
+  let liste = prio.filter(p => (!state.span || p.s===state.span) && (!q || p.soeg.includes(q)) && (!state.bare || p.ordrer.length));
+  const chips = '<button class="chip" id="bare" aria-pressed="'+state.bare+'">Kun med ventende ordrer</button>'+
+    (state.span?'<button class="chip" id="rydspan" aria-pressed="true">'+spaender[state.span]+' ✕</button>':'');
+  return '<div class="tools" style="margin-top:-6px">'+chips+'</div>'+
+    '<p class="hint">Gul nummerlap = forsendelsen har kunder, der venter. Pak den ud først. Klik en forsendelse for at se ordrer og varer.</p>'+
+    (liste.length?'<div class="polist">'+liste.map(poKort).join('')+'</div>':'<div class="empty">Ingen forsendelser matcher.</div>');
+}
+
+function visDage(){
+  const q = state.q;
+  const ps = D.po.filter(p=>!q || p.soeg.includes(q));
+  const grupper = new Map();
+  const late = ps.filter(p=>p.s==='late');
+  if (late.length) grupper.set('late', late);
+  ps.filter(p=>p.s!=='late').sort((a,b)=>a.dato<b.dato?-1:1).forEach(p=>{ if(!grupper.has(p.dato)) grupper.set(p.dato,[]); grupper.get(p.dato).push(p); });
+  const maks = Math.max(1,...[...grupper.values()].map(g=>g.reduce((a,p)=>a+p.stk,0)));
+  if (!grupper.size) return '<div class="empty">Ingen forsendelser matcher.</div>';
+  return '<div class="days">'+[...grupper.entries()].map(([k,g])=>{
+    const stk = g.reduce((a,p)=>a+p.stk,0), fs = g.reduce((a,p)=>a+p.ps,0), ord = g.reduce((a,p)=>a+p.ordrer.length,0);
+    const s = k==='late'?'late':spand(k);
+    const titel = k==='late'?'Forsinket':(s==='today'?'I dag':s==='tom'?'I morgen':dagNavn(k)[0].toUpperCase()+dagNavn(k).slice(1))+' · '+kortDato(k);
+    g.sort((a,b)=>(b.ordrer.length-a.ordrer.length)||(b.stk-a.stk));
+    return '<div class="day '+(s==='late'?'late':s==='today'?'today':'')+'"><h3><span>'+esc(titel)+'</span><span class="n">'+nf(stk)+' stk</span></h3>'+
+      '<div class="bar" title="'+nf(fs)+' presell af '+nf(stk)+'"><i class="p" style="width:'+(fs/maks*100)+'%"></i><i class="o" style="width:'+((stk-fs)/maks*100)+'%"></i></div>'+
+      '<div style="font-size:12.5px;color:var(--ink2)">'+g.length+' forsendelser · '+nf(fs)+' presell · '+ord+' ordrer venter</div>'+
+      '<ul>'+g.map(p=>'<li><button data-goto="'+p.id+'"><span>'+esc(p.lev)+'</span><span class="rf">PO '+p.id+(k==='late'?' · '+kortDato(p.dato):'')+(p.ref?' · '+esc(p.ref):'')+'</span></button><span class="num">'+(p.ordrer.length?'<span class="badge b-ps">'+p.ordrer.length+' ordr.</span> ':'')+nf(p.stk)+'</span></li>').join('')+'</ul></div>';
+  }).join('')+'</div>';
+}
+
+function visVarer(){
+  const q = state.q;
+  let v = D.varer.filter(x=>!q || (x.sku+' '+x.navn+' '+x.farve+' '+x.maerke+' '+x.ref+' '+x.po+' '+x.lev).toLowerCase().includes(q));
+  if (state.span) v = v.filter(x=>spand(x.dato)===state.span);
+  const {k,dir} = state.sort;
+  v.sort((a,b)=>{ const A=a[k],B=b[k]; return (typeof A==='number'? (A-B) : String(A).localeCompare(String(B),'da'))*dir; });
+  const th = (key,label,r) => '<th class="'+(r?'r':'')+'"><button data-sort="'+key+'">'+label+(k===key?(dir>0?' ↑':' ↓'):'')+'</button></th>';
+  const sum = v.reduce((a,x)=>a+x.stk,0);
+  return '<p class="hint">'+v.length+' varianter · '+nf(sum)+' stk i ventende ordrer'+(state.span?' · kun '+spaender[state.span].toLowerCase():'')+'. Klik en kolonne for at sortere.</p>'+
+   (v.length?'<div class="varer-tbl"><div class="scroll"><table><thead><tr>'+th('navn','Vare')+th('maerke','Mærke')+th('str','Str.')+th('stk','Solgt',1)+th('ps_po','På PO',1)+th('ordrer','Ordrer',1)+th('aeldst','Ældste ordre')+th('dato','Forventet')+th('po','PO')+'</tr></thead><tbody>'+
+   v.map(x=>'<tr><td>'+esc(x.navn)+(x.farve?' · '+esc(x.farve):'')+'<div class="sku">'+esc(x.sku)+'</div></td><td>'+esc(x.maerke)+'</td><td>'+esc(x.str)+'</td><td class="r num"><b>'+x.stk+'</b></td><td class="r num">'+nf(x.ps_po)+'</td><td class="r num">'+x.ordrer+'</td><td>'+alderTxt(x.aeldst)+'</td><td>'+datoBadge(x.dato)+'</td><td><a href="'+SP_PO(x.po)+'" target="_blank" rel="noopener" class="mono">'+x.po+'</a> '+(x.ref && x.ref!=='0'?'<div class="sku">'+esc(x.ref)+'</div>':'')+'</td></tr>').join('')+
+   '</tbody></table></div></div>':'<div class="empty">Ingen varer matcher.</div>');
+}
+
+function visUden(){
+  const q = state.q;
+  const u = D.uden_po.filter(o=>!q || (o.n+' '+o.skus.join(' ')).toLowerCase().includes(q));
+  return '<p class="hint">Ordrer med tagget Presell, hvor ingen af varerne ligger på en åben PO. Varen er måske kommet hjem, eller den mangler at blive bestilt. Tjek dem.</p>'+
+   (u.length?'<div class="scroll" style="max-height:none"><table><thead><tr><th>Ordre</th><th>Oprettet</th><th class="r">Alder</th><th>Varer (SKU)</th></tr></thead><tbody>'+
+   u.map(o=>'<tr><td><a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a></td><td class="num">'+fmtTid(o.t)+'</td><td class="r">'+alderTxt(o.t)+'</td><td class="sku">'+o.skus.map(esc).join('<br>')+'</td></tr>').join('')+
+   '</tbody></table></div>':'<div class="empty">Ingen ordrer matcher.</div>');
+}
+
+function render(){
+  $('#stats').innerHTML = statsHtml();
+  document.querySelectorAll('nav.tabs button').forEach(b=>{
+    const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
+    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length}[t];
+    b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
+  });
+  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden})[state.tab]();
+}
+
+document.addEventListener('click', e=>{
+  const s = e.target.closest('[data-span]');
+  if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab==='dage'||state.tab==='uden') state.tab='prio'; render(); return; }
+  const t = e.target.closest('nav.tabs button');
+  if (t){ state.tab = t.dataset.tab; try{localStorage.setItem('lv_tab',state.tab)}catch(_){} render(); return; }
+  if (e.target.closest('#bare')){ state.bare=!state.bare; render(); return; }
+  if (e.target.closest('#rydspan')){ state.span=null; render(); return; }
+  const so = e.target.closest('[data-sort]');
+  if (so){ const k=so.dataset.sort; state.sort = {k, dir: state.sort.k===k ? -state.sort.dir : (['stk','ordrer','ps_po'].includes(k)?-1:1)}; render(); return; }
+  const g = e.target.closest('[data-goto]');
+  if (g){ state.tab='prio'; state.span=null; state.q=''; $('#q').value=''; render();
+    const el = document.querySelector('details[data-po="'+g.dataset.goto+'"]'); if(el){ el.open=true; el.scrollIntoView({block:'start',behavior:'smooth'}); } }
+});
+let tmr; $('#q').addEventListener('input', e=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ state.q=e.target.value.trim().toLowerCase(); render(); },120); });
+render();
+}
+})();
+</script>
+</body>
+</html>
