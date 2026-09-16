@@ -1,0 +1,46 @@
+name: Varemodtagelse
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 4-20 * * *"   # hver halve time ca. kl. 06-22 dansk sommertid (05-21 om vinteren)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: varemodtagelse
+  cancel-in-progress: false
+
+jobs:
+  byg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Installer kryptering
+        run: pip install --quiet cryptography
+
+      - name: Hent tal og byg siden
+        env:
+          SMARTPACK_APP_ID: ${{ secrets.SMARTPACK_APP_ID }}
+          SMARTPACK_TOKEN: ${{ secrets.SMARTPACK_TOKEN }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: python3 build.py
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  udgiv:
+    needs: byg
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
