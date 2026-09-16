@@ -4,8 +4,16 @@ Varemodtagelse – overblik over åbne indkøbsordrer for lager og kundeservice.
 
 Henter
   1. åbne indkøbsordrer (PO'er) fra SmartPack
-  2. ikke-afsendte webshop-ordrer med tagget "Presell" (tidligere "Forsalg") fra Shopify
-og kobler hver ordrelinje til den tidligste åbne PO, der har varianten på presell.
+  2. alle åbne, ikke (fuldt) afsendte webshop-ordrer fra Shopify med varernes hyldeplaceringer
+     (metafeltet lisen.personale, sat af SmartPack presell-sync)
+
+Presell: ordrer med tagget "Presell" (tidligere "Forsalg") kobles til den tidligste åbne PO,
+der har varianten på presell.
+
+Flere lagre: samme regel som Mechanic-opgaven "Lagertags på ordrer" (FlereLagre/FLYT_LAGER):
+en ordre kan hverken pakkes samlet i Ramløse (lager + butik) eller i Helsinge. De varer på
+sådanne ordrer, der KUN ligger i Helsinge, skal flyttes til Ramløse – de samles på en flytteliste.
+Retur/karantæne og totes tæller ikke som lager. Linjer uden lager (presell) tæller ikke med.
 
 Resultatet krypteres med adgangskoden (AES-GCM, nøgle fra PBKDF2) og skrives ind i
 site/index.html, som GitHub Pages viser. Uden adgangskoden kan siden ikke læses.
@@ -135,14 +143,22 @@ def gql(query, variables=None, tries=8):
     raise RuntimeError("GraphQL: for mange THROTTLED-svar")
 
 
+PRESELL_TAGS = ("Presell", "Forsalg")
+
 ORDRE_Q = """
 query($after: String) {
-  orders(first: 40, after: $after, sortKey: CREATED_AT,
-         query: "(tag:Presell OR tag:Forsalg) AND fulfillment_status:unfulfilled AND status:open") {
+  orders(first: 20, after: $after, sortKey: CREATED_AT,
+         query: "status:open AND (fulfillment_status:unfulfilled OR fulfillment_status:partial)") {
     pageInfo { hasNextPage endCursor }
     nodes {
       id name createdAt tags sourceName
-      lineItems(first: 20) { nodes { sku unfulfilledQuantity variant { id } } }
+      lineItems(first: 30) {
+        nodes {
+          sku name unfulfilledQuantity
+          image { url(transform: {maxWidth: 120, maxHeight: 120}) }
+          variant { id title personale: metafield(namespace: "lisen", key: "personale") { jsonValue } }
+        }
+      }
     }
   }
 }"""
@@ -152,7 +168,7 @@ def hent_ordrer():
     if TEST_DIR:
         return json.load(open(os.path.join(TEST_DIR, "orders.json")))
     out, after = [], None
-    for _ in range(200):
+    for _ in range(1000):
         d = gql(ORDRE_Q, {"after": after})["orders"]
         out += d["nodes"]
         if not d["pageInfo"]["hasNextPage"]:
@@ -173,8 +189,80 @@ def gid_id(g):
 
 
 def navn_farve(produktnavn):
+    """"Navn | Farve | Type fra Mærke" -> (navn, farve). Mangler farven, er 2. del typen ("... fra ...")."""
     dele = [d.strip() for d in (produktnavn or "").split(" | ")]
-    return dele[0], (dele[1] if len(dele) > 1 else "")
+    farve = dele[1] if len(dele) > 2 or (len(dele) == 2 and " fra " not in dele[1]) else ""
+    return dele[0], farve
+
+
+def omraade(hylde):
+    if hylde.startswith("Hall Butik"):
+        return "butik"
+    if hylde.startswith("Hall Hel"):
+        return "helsinge"
+    return "lager"
+
+
+def beregn_flyt(raw_ordrer):
+    """Ordrer, der ligger på to lagre, og de Helsinge-varer, der skal flyttes (samme regel som Mechanic)."""
+    ordrer_ud, varer = [], {}
+    for o in raw_ordrer:
+        if (o.get("sourceName") or "") == "pos":
+            continue
+        linjer = []
+        venter = False
+        for li in (o.get("lineItems") or {}).get("nodes") or []:
+            q = tal(li.get("unfulfilledQuantity"))
+            v = li.get("variant")
+            if q <= 0 or not v:
+                continue
+            p = ((v.get("personale") or {}).get("jsonValue")) or {}
+            stk = {"lager": 0, "butik": 0, "helsinge": 0}
+            hel_hylder = []
+            for r in p.get("pl") or []:
+                navn, antal, flag = (list(r) + [None, None, None])[:3]
+                antal = tal(antal)
+                if flag or antal <= 0 or (navn or "").startswith("Tote"):
+                    continue
+                omr = omraade(navn or "")
+                stk[omr] += antal
+                if omr == "helsinge":
+                    hel_hylder.append([navn, antal])
+            ramlose = stk["lager"] + stk["butik"]
+            if ramlose <= 0 and stk["helsinge"] <= 0:
+                venter = True
+                continue
+            linjer.append({"li": li, "v": v, "q": q, "ramlose": ramlose, "hel": stk["helsinge"],
+                           "hylder": hel_hylder})
+        if not linjer:
+            continue
+        if all(l["ramlose"] > 0 for l in linjer) or all(l["hel"] > 0 for l in linjer):
+            continue
+        oid = gid_id(o["id"])
+        flyt = [l for l in linjer if l["ramlose"] <= 0]
+        ordrer_ud.append({
+            "id": oid, "n": o["name"], "t": o["createdAt"],
+            "linjer": len(linjer), "flyt": tal(sum(l["q"] for l in flyt)),
+            "presell": venter, "tagget": "FlereLagre" in (o.get("tags") or []),
+        })
+        for l in flyt:
+            li, v = l["li"], l["v"]
+            vid = gid_id(v.get("id"))
+            navn_str = li.get("name") or ""
+            titel = v.get("title") or ""
+            grund = navn_str[: -len(" - " + titel)] if titel and navn_str.endswith(" - " + titel) else navn_str
+            navn, farve = navn_farve(grund)
+            e = varer.setdefault(vid, {
+                "vid": vid, "sku": li.get("sku") or "", "navn": navn, "farve": farve,
+                "str": titel, "img": ((li.get("image") or {}).get("url")) or "",
+                "stk": 0, "hel_stk": l["hel"], "hylder": sorted(l["hylder"], key=lambda h: -h[1])[:6],
+                "ordrer": [], "aeldst": o["createdAt"],
+            })
+            e["stk"] += l["q"]
+            e["ordrer"].append({"id": oid, "n": o["name"], "presell": venter})
+            e["aeldst"] = min(e["aeldst"], o["createdAt"])
+    ordrer_ud.sort(key=lambda x: x["t"])
+    return {"ordrer": ordrer_ud, "varer": sorted(varer.values(), key=lambda x: (x["aeldst"], x["sku"]))}
 
 
 def beregn(raw_po, raw_ordrer):
@@ -223,6 +311,8 @@ def beregn(raw_po, raw_ordrer):
     ordrer = []
     for o in raw_ordrer:
         if (o.get("sourceName") or "") == "pos":
+            continue
+        if not any(t in PRESELL_TAGS for t in (o.get("tags") or [])):
             continue
         linjer = [{"sku": li.get("sku") or "", "q": tal(li.get("unfulfilledQuantity")),
                    "vid": gid_id((li.get("variant") or {}).get("id"))}
@@ -291,6 +381,7 @@ def beregn(raw_po, raw_ordrer):
     return {
         "hentet": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "po": ud_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
+        "flyt": beregn_flyt(raw_ordrer),
     }
 
 
@@ -313,12 +404,14 @@ def main():
     raw_po = hent_po()
     log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer")
     raw_ordrer = hent_ordrer()
-    log(f"Shopify: {len(raw_ordrer)} ikke-afsendte ordrer med tagget Presell")
+    log(f"Shopify: {len(raw_ordrer)} åbne, ikke afsendte ordrer")
 
     d = beregn(raw_po, raw_ordrer)
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
+    log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
+        f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
 
     blob = krypter(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), adgangskode)
     skabelon = open(os.path.join(HER, "template.html"), encoding="utf-8").read()

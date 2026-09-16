@@ -18,6 +18,7 @@
   --tape:#f6c343; --tape-ink:#2a2105;
   --late:#b3261e; --late-bg:#fbe7e5; --today:#0f6b3a; --today-bg:#e0f3e7; --tom:#8a5a00; --tom-bg:#fbf0d6; --later-bg:#eceff0;
   --shadow:0 1px 2px rgba(20,30,30,.06),0 4px 14px rgba(20,30,30,.05);
+  --flyt:#6d3fb3; --flyt-bg:#f1ebfa;
   --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -26,6 +27,7 @@
   --tape:#e0b23c; --tape-ink:#1f1803;
   --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
   --shadow:0 1px 2px rgba(0,0,0,.3);
+  --flyt:#b99af0; --flyt-bg:#2a2140;
 }}
 :root[data-theme="dark"]{
   --bg:#101415; --panel:#181e1f; --panel2:#1e2527; --ink:#e7ecec; --ink2:#a9b3b4; --ink3:#7d888a;
@@ -33,6 +35,7 @@
   --tape:#e0b23c; --tape-ink:#1f1803;
   --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
   --shadow:0 1px 2px rgba(0,0,0,.3);
+  --flyt:#b99af0; --flyt-bg:#2a2140;
 }
 *{box-sizing:border-box}
 html{color-scheme:light dark}
@@ -69,6 +72,34 @@ h1 small{display:block;font-size:12px;font-weight:600;letter-spacing:.14em;color
 .presell-band b{font-stretch:80%;font-weight:800;font-size:22px}
 .presell-band span{font-size:13px}
 .presell-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase}
+.flyt-band{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:center;width:100%;text-align:left;font:inherit;cursor:pointer;
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);border-left:6px solid var(--flyt);border-radius:6px;padding:10px 14px;margin:-12px 0 22px}
+.flyt-band:hover{border-color:var(--flyt)}
+.flyt-band div{display:flex;align-items:baseline;gap:6px}
+.flyt-band b{font-stretch:80%;font-weight:800;font-size:22px}
+.flyt-band span{font-size:13px;color:var(--ink2)}
+.flyt-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--flyt)}
+.flyt-band .gaa{margin-left:auto;font-weight:700;font-size:13px;color:var(--link)}
+.flyt-sum{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.flyt-sum div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;display:flex;flex-direction:column;min-width:150px;flex:1 1 150px}
+.flyt-sum b{font-stretch:80%;font-weight:800;font-size:28px;line-height:1.1}
+.flyt-sum span{font-size:12.5px;color:var(--ink2)}
+.flyt-sum .hoved b{color:var(--flyt)}
+.flytliste{display:flex;flex-direction:column;gap:8px}
+.flytvare{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px 10px 10px}
+.flytvare img,.flytvare .noimg{width:72px;height:72px;object-fit:cover;border-radius:4px;background:var(--panel2);border:1px solid var(--line2);display:block}
+.flytvare .noimg{display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--ink3)}
+.flytvare h3{margin:0;font-size:15.5px;font-weight:800;font-stretch:90%}
+.flytvare h3 small{font-weight:500;color:var(--ink2);font-stretch:100%}
+.flytvare .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--ink2);margin-top:2px}
+.hylder{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.hylde{font-family:var(--mono);font-size:11.5px;background:var(--flyt-bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:1px 6px;white-space:nowrap}
+.flytordrer{font-size:12.5px;margin-top:6px;color:var(--ink2);line-height:1.7;overflow-wrap:anywhere}
+.flytordrer a{margin-right:6px;white-space:nowrap}
+.flytantal{text-align:right;display:flex;flex-direction:column;align-items:flex-end}
+.flytantal b{font-stretch:80%;font-weight:800;font-size:26px;line-height:1;color:var(--flyt)}
+.flytantal span{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+@media (max-width:560px){.flytvare{grid-template-columns:56px minmax(0,1fr)}.flytvare img,.flytvare .noimg{width:56px;height:56px}.flytantal{grid-column:2;flex-direction:row;gap:6px;align-items:baseline}}
 
 nav.tabs{display:flex;gap:4px;border-bottom:2px solid var(--ink);margin-bottom:14px;overflow-x:auto}
 nav.tabs button{font:inherit;font-weight:700;font-size:14px;background:none;border:0;padding:9px 14px;color:var(--ink2);cursor:pointer;border-radius:5px 5px 0 0;white-space:nowrap}
@@ -188,12 +219,14 @@ footer{margin-top:28px;font-size:12.5px;color:var(--ink3);max-width:70ch}
 
   <section class="stats" id="stats" aria-label="Indkøbsordrer efter forventet levering"></section>
   <section class="presell-band" id="band" aria-label="Presell"></section>
+  <button type="button" class="flyt-band" id="flytband" data-tab-goto="flyt" aria-label="Ordrer på flere lagre"></button>
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
     <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
     <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
     <button role="tab" id="tab-uden" aria-selected="false" data-tab="uden">Presell uden PO</button>
+    <button role="tab" id="tab-flyt" aria-selected="false" data-tab="flyt">Flyt fra Helsinge</button>
   </nav>
 
   <div class="tools" id="tools">
@@ -433,19 +466,52 @@ function visUden(){
    '</tbody></table></div>':'<div class="empty">Ingen ordrer matcher.</div>');
 }
 
+const F = D.flyt || {ordrer: [], varer: []};
+const flytStk = F.varer.reduce((a,v)=>a+v.stk,0);
+const flytPresell = F.ordrer.filter(o=>o.presell).length;
+$('#flytband').innerHTML =
+  '<span class="tag">Flere lagre</span>'+
+  '<div><b class="num">'+nf(F.ordrer.length)+'</b><span>ordrer kan ikke pakkes samlet</span></div>'+
+  '<div><b class="num">'+nf(flytStk)+'</b><span>stk ('+nf(F.varer.length)+' varer) skal flyttes fra Helsinge</span></div>'+
+  '<span class="gaa">Se flyttelisten →</span>';
+
+function visFlyt(){
+  const q = state.q;
+  const v = F.varer.filter(x=>!q || (x.sku+' '+x.navn+' '+x.farve+' '+x.str+' '+x.hylder.map(h=>h[0]).join(' ')+' '+x.ordrer.map(o=>o.n).join(' ')).toLowerCase().includes(q));
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(F.ordrer.length)+'</b><span>åbne ordrer ligger på både Ramløse og Helsinge</span></div>'+
+    '<div><b class="num">'+nf(flytStk)+'</b><span>stk skal flyttes fra Helsinge til Ramløse</span></div>'+
+    '<div><b class="num">'+nf(F.varer.length)+'</b><span>forskellige varer (størrelser)</span></div>'+
+    '<div><b class="num">'+nf(flytPresell)+'</b><span>af ordrerne venter også på presell</span></div></div>';
+  const kort = x => {
+    const img = x.img ? '<img src="'+esc(x.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="72" height="72">' : '<div class="noimg">intet billede</div>';
+    const ord = x.ordrer.map(o=>'<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
+    return '<div class="flytvare">'+img+
+      '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
+      '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.hel_stk)+' stk i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
+      '<div class="hylder">'+x.hylder.map(h=>'<span class="hylde" title="'+esc(h[0])+'">'+esc(h[0].replace(/^Hall /,''))+' — '+nf(h[1])+' stk</span>').join('')+'</div>'+
+      '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
+      '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
+  };
+  return sum+'<p class="hint">Samme regel som tagget FlereLagre i Shopify: ordren har mindst én vare, der kun ligger i Helsinge, og mindst én, der kun ligger i Ramløse (lager eller butik). Listen viser de varer, der skal hentes i Helsinge – ældste ordre først. Retur, karantæne og totes tæller ikke som lager.</p>'+
+    (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
+}
+
 function render(){
   $('#stats').innerHTML = statsHtml();
   document.querySelectorAll('nav.tabs button').forEach(b=>{
     const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length}[t];
+    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length}[t];
     b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
   });
-  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden})[state.tab]();
+  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
   const s = e.target.closest('[data-span]');
-  if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab==='dage'||state.tab==='uden') state.tab='prio'; render(); return; }
+  if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab!=='prio'&&state.tab!=='varer') state.tab='prio'; render(); return; }
+  const fb = e.target.closest('[data-tab-goto]');
+  if (fb){ state.tab = fb.dataset.tabGoto; try{localStorage.setItem('lv_tab',state.tab)}catch(_){} render(); document.querySelector('nav.tabs').scrollIntoView({block:'start',behavior:'smooth'}); return; }
   const t = e.target.closest('nav.tabs button');
   if (t){ state.tab = t.dataset.tab; try{localStorage.setItem('lv_tab',state.tab)}catch(_){} render(); return; }
   if (e.target.closest('#bare')){ state.bare=!state.bare; render(); return; }
