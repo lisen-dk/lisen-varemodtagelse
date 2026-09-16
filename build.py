@@ -238,6 +238,89 @@ def omraade(hylde):
 VENTER_PAA_VARER = {"WaitingForStock", "OutOfStock"}
 
 
+def placeringer(pl):
+    """Hyldeplaceringer -> (antal pr. område, hylder pr. område).
+
+    Karantæne (flag) og returkasser (Tote Retur…) tæller ikke som lager."""
+    stk = {"lager": 0, "butik": 0, "helsinge": 0}
+    hylder = {"lager": [], "butik": [], "helsinge": []}
+    for r in pl or []:
+        navn, antal, flag = (list(r) + [None, None, None])[:3]
+        antal = tal(antal)
+        if flag or antal <= 0 or (navn or "").startswith("Tote Retur"):
+            continue
+        omr = omraade(navn or "")
+        stk[omr] += antal
+        hylder[omr].append([navn, antal])
+    return stk, hylder
+
+
+STR_ORDEN = ["XXXS", "XXS", "XS", "XS/S", "S", "S/M", "M", "M/L", "L", "L/XL", "XL", "XL/XXL", "XXL", "XXXL",
+             "2XL", "3XL", "4XL", "ONE SIZE", "OS"]
+
+
+LANGE_STR = [("XXX-LARGE", "XXXL"), ("XX-LARGE", "XXL"), ("X-LARGE", "XL"), ("XXX-SMALL", "XXXS"),
+             ("XX-SMALL", "XXS"), ("X-SMALL", "XS"), ("SMALL", "S"), ("MEDIUM", "M"), ("LARGE", "L"),
+             ("ONESIZE", "ONE SIZE")]
+
+
+def str_noegle(s):
+    s = (s or "").strip().upper()
+    for lang, kort in LANGE_STR:
+        s = s.replace(lang, kort)
+    s = s.replace(" / ", "/")
+    if s in STR_ORDEN:
+        return (0, STR_ORDEN.index(s), s)
+    tal_del = "".join(c for c in s if c.isdigit() or c == ".")
+    try:
+        return (1, float(tal_del), s)
+    except ValueError:
+        return (2, 0, s)
+
+
+def beregn_kun_helsinge(lager, varer, klass):
+    """Produkter med varianter, der KUN ligger i Helsinge (intet på Lager Ramløse eller i butikken)."""
+    efterspurgt = collections.defaultdict(lambda: {"stk": 0, "ordrer": {}})
+    for o, k in klass:
+        for l in k["linjer"]:
+            e = efterspurgt[l["sku"]]
+            e["stk"] += l["q"]
+            e["ordrer"][gid_id(o["id"])] = {"id": gid_id(o["id"]), "n": o["name"], "t": o["createdAt"]}
+    grupper = {}
+    for sku, pl in lager.items():
+        stk, hylder = placeringer(pl)
+        if stk["helsinge"] <= 0 or stk["lager"] > 0 or stk["butik"] > 0:
+            continue
+        v = varer.get(sku) or {}
+        produkt = v.get("productName") or sku
+        navn, farve = navn_farve(produkt)
+        g = grupper.setdefault(produkt, {
+            "navn": navn, "farve": farve, "maerke": v.get("manufacturerName") or "",
+            "img": lille_billede(v.get("imageUrl")), "stk": 0, "ord_stk": 0,
+            "varianter": [], "_hylder": collections.Counter(), "_ordrer": {},
+        })
+        e = efterspurgt.get(sku) or {"stk": 0, "ordrer": {}}
+        g["stk"] += stk["helsinge"]
+        g["ord_stk"] += e["stk"]
+        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["varianter"].append({"sku": sku, "str": v.get("variantName") or "", "stk": tal(stk["helsinge"]),
+                               "res": tal(v.get("reservedCombined")), "ord": tal(e["stk"])})
+        for h, a in hylder["helsinge"]:
+            g["_hylder"][h] += a
+        g["_ordrer"].update(e["ordrer"])
+    ud = []
+    for g in grupper.values():
+        g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
+        g["hylder"] = [[h, tal(a)] for h, a in g.pop("_hylder").most_common(8)]
+        ordrer = sorted(g.pop("_ordrer").values(), key=lambda x: x["t"])
+        g["antal_ordrer"] = len(ordrer)
+        g["ordrer"] = [{"id": x["id"], "n": x["n"]} for x in ordrer[:12]]
+        g["stk"], g["ord_stk"] = tal(g["stk"]), tal(g["ord_stk"])
+        ud.append(g)
+    ud.sort(key=lambda g: (-g["ord_stk"], g["navn"].lower(), g["farve"].lower()))
+    return ud
+
+
 def klassificer(o):
     """Samme logik som Mechanic-opgaven "Lagertags på ordrer" – men beregnet her, uafhængigt af tags.
 
@@ -262,19 +345,8 @@ def klassificer(o):
         if q <= 0 or not v:
             continue
         p = ((v.get("personale") or {}).get("jsonValue")) or {}
-        stk = {"lager": 0, "butik": 0, "helsinge": 0}
-        hel_hylder, butik_hylder = [], []
-        for r in p.get("pl") or []:
-            navn, antal, flag = (list(r) + [None, None, None])[:3]
-            antal = tal(antal)
-            if flag or antal <= 0 or (navn or "").startswith("Tote Retur"):
-                continue
-            omr = omraade(navn or "")
-            stk[omr] += antal
-            if omr == "helsinge":
-                hel_hylder.append([navn, antal])
-            elif omr == "butik":
-                butik_hylder.append([navn, antal])
+        stk, hylder = placeringer(p.get("pl"))
+        hel_hylder, butik_hylder = hylder["helsinge"], hylder["butik"]
         ramlose = stk["lager"] + stk["butik"]
         sp_state = li.get("sp_state")
         if sp_state:
@@ -379,7 +451,7 @@ def beregn_butik(klass):
     return ud
 
 
-def beregn(raw_po, raw_ordrer):
+def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
     # PO'er i et enkelt format
     pos = []
     for p in raw_po:
@@ -494,6 +566,7 @@ def beregn(raw_po, raw_ordrer):
         "po": ud_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
         "flyt": beregn_flyt(klass),
         "butik": beregn_butik(klass),
+        "kun_hel": beregn_kun_helsinge(lager or {}, detaljer or {}, klass),
     }
 
 
@@ -519,17 +592,22 @@ def main():
     lager = hent_lager()
     skus = {(it.get("sku") or "").strip() for o in sp_ordrer for it in (o.get("items") or []) if it.get("type") == 0}
     skus |= {(l.get("sku") or "").strip() for p in raw_po for l in (p.get("items") or [])}
-    varer = hent_varer(skus)
+    kun_hel = {sku for sku, pl in lager.items()
+               if (lambda st: st["helsinge"] > 0 and st["lager"] <= 0 and st["butik"] <= 0)(placeringer(pl)[0])}
+    alle_skus = skus | kun_hel
+    varer = hent_varer(alle_skus)
     raw_ordrer = sp_til_noder(sp_ordrer, lager, varer)
     log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
-        f"{len(varer)} af {len(skus)} varer med detaljer")
+        f"{len(alle_skus & set(varer))} af {len(alle_skus)} varer med detaljer")
 
-    d = beregn(raw_po, raw_ordrer)
+    d = beregn(raw_po, raw_ordrer, lager, varer)
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
     log(f"Butik: {len(d['butik'])} varianter skal hentes i butikken i Ramløse "
         f"({sum(v['nu'] for v in d['butik'])} stk nu, {sum(v['senere_butik'] for v in d['butik'])} stk senere)")
+    log(f"Kun i Helsinge: {sum(len(g['varianter']) for g in d['kun_hel'])} varianter "
+        f"({sum(g['stk'] for g in d['kun_hel'])} stk) i {len(d['kun_hel'])} produkter")
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
 
