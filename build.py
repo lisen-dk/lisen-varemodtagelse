@@ -17,6 +17,9 @@ Flere lagre: ordrer, der hverken kan pakkes samlet i Ramløse (lager + butik) el
 De varer på sådanne ordrer, der KUN ligger i Helsinge, skal flyttes til Ramløse – de samles på
 en flytteliste.
 
+Butik: butikken er sidste mulighed – kun det, som Lager Ramløse og Lager Helsinge ikke kan
+dække, skal hentes i butikken (se beregn_butik).
+
 Resultatet krypteres med adgangskoden (AES-GCM, nøgle fra PBKDF2) og skrives ind i
 site/index.html, som GitHub Pages viser. Uden adgangskoden kan siden ikke læses.
 
@@ -225,7 +228,7 @@ def klassificer(o):
             continue
         p = ((v.get("personale") or {}).get("jsonValue")) or {}
         stk = {"lager": 0, "butik": 0, "helsinge": 0}
-        hel_hylder = []
+        hel_hylder, butik_hylder = [], []
         for r in p.get("pl") or []:
             navn, antal, flag = (list(r) + [None, None, None])[:3]
             antal = tal(antal)
@@ -235,10 +238,13 @@ def klassificer(o):
             stk[omr] += antal
             if omr == "helsinge":
                 hel_hylder.append([navn, antal])
+            elif omr == "butik":
+                butik_hylder.append([navn, antal])
         ramlose = stk["lager"] + stk["butik"]
         presell = tal(p.get("res")) > tal(p.get("tot")) or (ramlose <= 0 and stk["helsinge"] <= 0)
         linjer.append({"li": li, "v": v, "vid": gid_id(v.get("id")), "sku": li.get("sku") or "", "q": q,
-                       "presell": presell, "ramlose": ramlose, "hel": stk["helsinge"], "hylder": hel_hylder})
+                       "presell": presell, "ramlose": ramlose, "hel": stk["helsinge"], "hylder": hel_hylder,
+                       "lager_stk": stk["lager"], "butik_stk": stk["butik"], "butik_hylder": butik_hylder})
     lager = [l for l in linjer if not l["presell"]]
     pak = ""
     if lager:
@@ -283,6 +289,52 @@ def beregn_flyt(klass):
             e["aeldst"] = min(e["aeldst"], o["createdAt"])
     ordrer_ud.sort(key=lambda x: x["t"])
     return {"ordrer": ordrer_ud, "varer": sorted(varer.values(), key=lambda x: (x["aeldst"], x["sku"]))}
+
+
+def vare_info(l):
+    li, v = l["li"], l["v"]
+    navn_str = li.get("name") or ""
+    titel = v.get("title") or ""
+    grund = navn_str[: -len(" - " + titel)] if titel and navn_str.endswith(" - " + titel) else navn_str
+    navn, farve = navn_farve(grund)
+    return {"vid": l["vid"], "sku": l["sku"], "navn": navn, "farve": farve, "str": titel,
+            "img": ((li.get("image") or {}).get("url")) or ""}
+
+
+def beregn_butik(klass):
+    """Varer, der skal hentes i butikken i Ramløse til webshop-ordrer.
+
+    Butikken er altid sidste mulighed: så længe varen kan plukkes på Lager Ramløse eller
+    Lager Helsinge, tages den der. Kun det, som de to lagre ikke kan dække, hentes i butikken.
+    Ordrer, der kan pakkes nu (uden presell-varer), får lagrene først – ældste ordre først.
+    """
+    varer = {}
+    for o, k in sorted(klass, key=lambda x: x[0]["createdAt"]):
+        klar = not k["presell"]
+        for l in k["lager"]:
+            if l["butik_stk"] <= 0:
+                continue
+            e = varer.get(l["vid"])
+            if e is None:
+                e = varer[l["vid"]] = dict(vare_info(l), lager_stk=l["lager_stk"], hel_stk=l["hel"], butik_stk=l["butik_stk"],
+                                           hylder=sorted(l["butik_hylder"], key=lambda h: -h[1])[:6],
+                                           klar=0, senere=0, ordrer=[], aeldst=o["createdAt"])
+            e["klar" if klar else "senere"] += l["q"]
+            e["ordrer"].append({"id": gid_id(o["id"]), "n": o["name"], "t": o["createdAt"],
+                                "q": l["q"], "presell": not klar})
+    ud = []
+    for e in varer.values():
+        andre = e["lager_stk"] + e["hel_stk"]  # butikken er sidste mulighed
+        nu = min(e["butik_stk"], max(0, e["klar"] - andre))
+        rest_lager = max(0, andre - e["klar"])
+        senere = min(e["butik_stk"] - nu, max(0, e["senere"] - rest_lager))
+        if nu <= 0 and senere <= 0:
+            continue
+        e["nu"], e["senere_butik"] = tal(nu), tal(senere)
+        e["ordrer"].sort(key=lambda x: (x["presell"], x["t"]))
+        ud.append(e)
+    ud.sort(key=lambda x: (x["nu"] <= 0, x["aeldst"], x["sku"]))
+    return ud
 
 
 def beregn(raw_po, raw_ordrer):
@@ -398,6 +450,7 @@ def beregn(raw_po, raw_ordrer):
         "hentet": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "po": ud_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
         "flyt": beregn_flyt(klass),
+        "butik": beregn_butik(klass),
     }
 
 
@@ -426,6 +479,8 @@ def main():
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
+    log(f"Butik: {len(d['butik'])} varianter skal hentes i butikken i Ramløse "
+        f"({sum(v['nu'] for v in d['butik'])} stk nu, {sum(v['senere_butik'] for v in d['butik'])} stk senere)")
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
 

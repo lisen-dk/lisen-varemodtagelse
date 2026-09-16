@@ -18,7 +18,7 @@
   --tape:#f6c343; --tape-ink:#2a2105;
   --late:#b3261e; --late-bg:#fbe7e5; --today:#0f6b3a; --today-bg:#e0f3e7; --tom:#8a5a00; --tom-bg:#fbf0d6; --later-bg:#eceff0;
   --shadow:0 1px 2px rgba(20,30,30,.06),0 4px 14px rgba(20,30,30,.05);
-  --flyt:#6d3fb3; --flyt-bg:#f1ebfa;
+  --flyt:#6d3fb3; --flyt-bg:#f1ebfa; --butik:#0e7a55; --butik-bg:#e3f4ec;
   --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -27,7 +27,7 @@
   --tape:#e0b23c; --tape-ink:#1f1803;
   --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
   --shadow:0 1px 2px rgba(0,0,0,.3);
-  --flyt:#b99af0; --flyt-bg:#2a2140;
+  --flyt:#b99af0; --flyt-bg:#2a2140; --butik:#5fd3a2; --butik-bg:#15302a;
 }}
 :root[data-theme="dark"]{
   --bg:#101415; --panel:#181e1f; --panel2:#1e2527; --ink:#e7ecec; --ink2:#a9b3b4; --ink3:#7d888a;
@@ -35,7 +35,7 @@
   --tape:#e0b23c; --tape-ink:#1f1803;
   --late:#ff8a80; --late-bg:#3a1b19; --today:#6fd39a; --today-bg:#16301f; --tom:#f0c060; --tom-bg:#33290f; --later-bg:#232b2d;
   --shadow:0 1px 2px rgba(0,0,0,.3);
-  --flyt:#b99af0; --flyt-bg:#2a2140;
+  --flyt:#b99af0; --flyt-bg:#2a2140; --butik:#5fd3a2; --butik-bg:#15302a;
 }
 *{box-sizing:border-box}
 html{color-scheme:light dark}
@@ -80,6 +80,13 @@ h1 small{display:block;font-size:12px;font-weight:600;letter-spacing:.14em;color
 .flyt-band span{font-size:13px;color:var(--ink2)}
 .flyt-band .tag{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--flyt)}
 .flyt-band .gaa{margin-left:auto;font-weight:700;font-size:13px;color:var(--link)}
+.flyt-band.butik-band{border-left-color:var(--butik)}
+.flyt-band.butik-band:hover{border-color:var(--butik)}
+.flyt-band.butik-band .tag{color:var(--butik)}
+.flyt-band + .flyt-band{margin-top:-14px}
+.butik-vis .flyt-sum .hoved b,.butik-vis .flytantal b{color:var(--butik)}
+.butik-vis .hylde{background:var(--butik-bg)}
+.flytantal small{font-size:11.5px;color:var(--ink2);margin-top:4px;white-space:nowrap}
 .flyt-sum{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
 .flyt-sum div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;display:flex;flex-direction:column;min-width:150px;flex:1 1 150px}
 .flyt-sum b{font-stretch:80%;font-weight:800;font-size:28px;line-height:1.1}
@@ -220,6 +227,7 @@ footer{margin-top:28px;font-size:12.5px;color:var(--ink3);max-width:70ch}
   <section class="stats" id="stats" aria-label="Indkøbsordrer efter forventet levering"></section>
   <section class="presell-band" id="band" aria-label="Presell"></section>
   <button type="button" class="flyt-band" id="flytband" data-tab-goto="flyt" aria-label="Ordrer på flere lagre"></button>
+  <button type="button" class="flyt-band butik-band" id="butikband" data-tab-goto="butik" aria-label="Hent i butikken"></button>
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
@@ -227,6 +235,7 @@ footer{margin-top:28px;font-size:12.5px;color:var(--ink3);max-width:70ch}
     <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
     <button role="tab" id="tab-uden" aria-selected="false" data-tab="uden">Presell uden PO</button>
     <button role="tab" id="tab-flyt" aria-selected="false" data-tab="flyt">Flyt fra Helsinge</button>
+    <button role="tab" id="tab-butik" aria-selected="false" data-tab="butik">Hent i butikken</button>
   </nav>
 
   <div class="tools" id="tools">
@@ -497,14 +506,45 @@ function visFlyt(){
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
 }
 
+const B = D.butik || [];
+const butikNu = B.reduce((a,v)=>a+v.nu,0), butikSenere = B.reduce((a,v)=>a+v.senere_butik,0);
+$('#butikband').innerHTML =
+  '<span class="tag">Butik Ramløse</span>'+
+  '<div><b class="num">'+nf(butikNu)+'</b><span>stk skal hentes i butikken til webshop-ordrer nu</span></div>'+
+  (butikSenere?'<div><b class="num">'+nf(butikSenere)+'</b><span>stk senere (ordren venter på presell)</span></div>':'')+
+  '<span class="gaa">Se butikslisten →</span>';
+
+function visButik(){
+  const q = state.q;
+  const v = B.filter(x=>!q || (x.sku+' '+x.navn+' '+x.farve+' '+x.str+' '+x.hylder.map(h=>h[0]).join(' ')+' '+x.ordrer.map(o=>o.n).join(' ')).toLowerCase().includes(q));
+  const ordrerNu = new Set(B.flatMap(x=>x.ordrer.filter(o=>!o.presell).map(o=>o.id))).size;
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(butikNu)+'</b><span>stk skal hentes i butikken nu</span></div>'+
+    '<div><b class="num">'+nf(B.filter(x=>x.nu>0).length)+'</b><span>forskellige varer (størrelser)</span></div>'+
+    '<div><b class="num">'+nf(ordrerNu)+'</b><span>webshop-ordrer, der kan pakkes, venter på dem</span></div>'+
+    '<div><b class="num">'+nf(butikSenere)+'</b><span>stk senere – ordren venter også på presell</span></div></div>';
+  const kort = x => {
+    const img = x.img ? '<img src="'+esc(x.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="72" height="72">' : '<div class="noimg">intet billede</div>';
+    const ord = x.ordrer.map(o=>'<a href="'+SH_ORD(o.id)+'" target="_blank" rel="noopener">'+esc(o.n)+'</a>'+(o.q>1?' ('+o.q+' stk)':'')+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
+    return '<div class="flytvare">'+img+
+      '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
+      '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.butik_stk)+' stk i butikken · '+nf(x.lager_stk)+' på Lager Ramløse · '+nf(x.hel_stk)+' i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
+      '<div class="hylder">'+x.hylder.map(h=>'<span class="hylde" title="'+esc(h[0])+'">'+esc(h[0].replace(/^Hall /,''))+' — '+nf(h[1])+' stk</span>').join('')+'</div>'+
+      '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
+      '<div class="flytantal"><b class="num">'+nf(x.nu)+'</b><span>stk hentes nu</span>'+(x.senere_butik?'<small>+ '+nf(x.senere_butik)+' senere</small>':'')+'</div></div>';
+  };
+  return '<div class="butik-vis">'+sum+'<p class="hint">Butikken er sidste mulighed: så længe en vare kan plukkes på Lager Ramløse eller Lager Helsinge, tages den der. Listen viser kun det, som de to lagre ikke kan dække, og som derfor skal hentes ud af butikken til webshop-ordrer. Ordrer, der kan pakkes nu, går forud for ordrer, der også venter på presell. Retur, karantæne og totes tæller ikke som lager.</p>'+
+    (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(B.length?'Ingen varer matcher søgningen.':'Ingen varer skal hentes i butikken lige nu.')+'</div>')+'</div>';
+}
+
 function render(){
   $('#stats').innerHTML = statsHtml();
   document.querySelectorAll('nav.tabs button').forEach(b=>{
     const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length}[t];
+    const c = {prio:D.po.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length}[t];
     b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
   });
-  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
