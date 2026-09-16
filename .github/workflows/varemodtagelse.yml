@@ -2,14 +2,18 @@ name: Varemodtagelse
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [smartpack]            # sendes af Cloudflare-Workeren, når SmartPack melder ændringer
   schedule:
-    - cron: "*/30 4-20 * * *"   # hver halve time ca. kl. 06-22 dansk sommertid (05-21 om vinteren)
+    - cron: "*/30 4-20 * * *"     # sikkerhedsnet: hver halve time ca. kl. 06-22 dansk sommertid
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Højst én kørsel ad gangen + én i kø. Kommer der flere ændringer, mens en kørsel er i gang,
+# samles de i den ene kørsel, der står i kø.
 concurrency:
   group: varemodtagelse
   cancel-in-progress: false
@@ -17,7 +21,7 @@ concurrency:
 jobs:
   byg:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -28,8 +32,6 @@ jobs:
         env:
           SMARTPACK_APP_ID: ${{ secrets.SMARTPACK_APP_ID }}
           SMARTPACK_TOKEN: ${{ secrets.SMARTPACK_TOKEN }}
-          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
-          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
         run: python3 build.py
 
