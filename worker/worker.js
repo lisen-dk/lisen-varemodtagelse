@@ -92,6 +92,9 @@ export class Samler {
   async alarm() {
     const s = this.state.storage;
     const antal = (await s.get("antal")) || {};
+    // Noteres før GitHub-kaldet, så ændringer, der kommer imens, venter de fulde 60 sekunder.
+    const start = Date.now();
+    await s.put("sidst_startet", start);
     const r = await fetch(`https://api.github.com/repos/${this.env.GITHUB_REPO}/dispatches`, {
       method: "POST",
       headers: {
@@ -117,6 +120,6 @@ export class Samler {
       nu[k] = (nu[k] || 0) - v;
       if (nu[k] <= 0) delete nu[k];
     }
-    await s.put({ i_alt, antal: nu, sidst_startet: Date.now() });
+    await s.put({ i_alt, antal: nu });
   }
 }
