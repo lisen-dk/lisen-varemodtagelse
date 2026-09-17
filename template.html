@@ -631,7 +631,7 @@ async function gemDato(id){
     [AP, D.po].forEach(liste => liste.forEach(x => { if (x.id===id){ x.dato = dato; if ('s' in x) x.s = spand(dato); } }));
     aendrede.add(id); redigerer = null; gemmer = false;
     render();
-    toast('PO '+id+': forventet dato ændret til '+kortDato(dato)+(svar.gammel?' (før '+kortDato(svar.gammel)+')':'')+'. Resten af dashboardet opdateres om et par minutter.');
+    toast('PO '+id+': forventet dato ændret til '+kortDato(dato)+(svar.gammel?' (før '+kortDato(svar.gammel)+')':'')+'. Resten af dashboardet opdateres inden for ca. 10 minutter.');
   } catch(err){
     gemmer = false; redigerFejl = err.message || 'Kunne ikke gemme.';
     render();
