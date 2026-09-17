@@ -759,7 +759,13 @@ function visKunHel(){
     '<div><b class="num">'+nf(KH.length)+'</b><span>produkter (navn og farve)</span></div>'+
     '<div><b class="num">'+nf(khOrd.length)+'</b><span>produkter er i åbne ordrer</span></div></div>';
   const kort = g => {
-    const strl = g.varianter.map(x=>'<span'+(x.ord>0?' class="i-ordre" title="'+nf(x.ord)+' stk i åbne ordrer"':'')+'>'+esc(x.str||x.sku)+' <b>'+nf(x.stk)+'</b></span>').join('');
+    // Samme størrelse i flere farver/varianter lægges sammen, så hver størrelse kun står én gang.
+    const pr = new Map();
+    g.varianter.forEach(x=>{ const k = x.str||x.sku; const a = pr.get(k) || {str:k, stk:0, ord:0, n:0}; a.stk += x.stk; a.ord += x.ord; a.n++; pr.set(k, a); });
+    const strl = [...pr.values()].map(x=>{
+      const t = [x.n>1 ? x.n+' varianter' : '', x.ord>0 ? nf(x.ord)+' stk i åbne ordrer' : ''].filter(Boolean).join(' · ');
+      return '<span'+(x.ord>0?' class="i-ordre"':'')+(t?' title="'+t+'"':'')+'>'+esc(x.str)+' <b>'+nf(x.stk)+'</b></span>';
+    }).join('');
     const ord = g.antal_ordrer ? '<div class="flytordrer">'+nf(g.ord_stk)+' stk i '+g.antal_ordrer+(g.antal_ordrer===1?' åben ordre: ':' åbne ordrer: ')+g.ordrer.map(ordA).join(' ')+(g.antal_ordrer>g.ordrer.length?' …':'')+'</div>' : '';
     return '<div class="flytvare">'+kortBillede(g.img)+
       '<div><h3>'+esc(g.navn)+(g.farve?' <small>· '+esc(g.farve)+'</small>':'')+'</h3>'+
@@ -769,7 +775,7 @@ function visKunHel(){
       ord+'</div>'+
       '<div class="flytantal"><b class="num">'+nf(g.stk)+'</b><span>stk i Helsinge</span></div></div>';
   };
-  return sum+'<p class="hint">Varer, der ligger i Helsinge (Hel-1, Hel-2 …), men hverken på Lager Ramløse eller i butikken. Én linje pr. produkt og farve; tallet ved hver størrelse er antal i Helsinge, og størrelser med lilla kant er i åbne ordrer. Flest stk øverst. Karantæne og returkasser tæller ikke som lager.</p>'+
+  return sum+'<p class="hint">Varer, der ligger i Helsinge (Hel-1, Hel-2 …), men hverken på Lager Ramløse eller i butikken. Én linje pr. produkt og farve; tallet ved hver størrelse er antal i Helsinge (flere farver af samme størrelse er lagt sammen), og størrelser med lilla kant er i åbne ordrer. Flest stk øverst. Karantæne og returkasser tæller ikke som lager.</p>'+
     '<div class="knaprad"><button type="button" class="filter-knap" id="kh-filter" aria-pressed="'+khKunOrdrer+'">Kun produkter i åbne ordrer ('+nf(khOrd.length)+')</button>'+lokKnap()+'</div>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(KH.length?'Ingen varer matcher.':'Ingen varer ligger kun i Helsinge.')+'</div>');
 }
