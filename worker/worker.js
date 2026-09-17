@@ -3,7 +3,8 @@
 // SmartPack kalder POST /smartpack (basic auth), når ordrer eller lagertal ændres.
 // Workeren gemmer INGEN data fra SmartPack. Den samler ændringerne i et 30 sekunders vindue
 // (Durable Object med alarm) og beder derefter GitHub om at bygge dashboardet igen
-// (repository_dispatch "smartpack"). Mindst 60 sekunder mellem to opstarter.
+// (repository_dispatch "smartpack"). Mindst 10 minutter mellem to opstarter: GitHub Pages holder op med at
+// udgive nye versioner (uden fejlmelding), hvis siden udgives mere end ca. 10 gange i timen.
 //
 // Dashboardet kan også ændre en PO's forventede leveringsdato (POST /po/dato). Forespørgslen er
 // underskrevet (HMAC) med den nøgle, dashboardet afleder af adgangskoden, og gælder kun i 5 minutter.
@@ -13,7 +14,7 @@
 // Variabler: GITHUB_REPO (fx "lisen-dk/lisen-varemodtagelse"), DASH_ORIGIN (dashboardets adresse)
 
 const SAML_MS = 30_000;       // vent så længe efter første ændring
-const MIN_MELLEM_MS = 60_000; // mindst så længe mellem to GitHub-kørsler
+const MIN_MELLEM_MS = 10 * 60_000; // mindst så længe mellem to GitHub-kørsler (Pages-grænse)
 
 function lige(a, b) {
   // sammenligning i konstant tid
@@ -185,7 +186,7 @@ export class Samler {
   async alarm() {
     const s = this.state.storage;
     const antal = (await s.get("antal")) || {};
-    // Noteres før GitHub-kaldet, så ændringer, der kommer imens, venter de fulde 60 sekunder.
+    // Noteres før GitHub-kaldet, så ændringer, der kommer imens, venter de fulde 10 minutter.
     const start = Date.now();
     await s.put("sidst_startet", start);
     const r = await fetch(`https://api.github.com/repos/${this.env.GITHUB_REPO}/dispatches`, {
