@@ -231,6 +231,42 @@ td.thumb{width:48px;padding-right:0}
 
 .varer-tbl th button{font:inherit;background:none;border:0;color:inherit;cursor:pointer;padding:0;letter-spacing:inherit;text-transform:inherit}
 .varer-tbl .scroll{max-height:none}
+.koe-g{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.koe-g>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:13px 18px;cursor:pointer;list-style:none}
+.koe-g>summary::-webkit-details-marker{display:none}
+.koe-g>summary::before{content:"\203A";font-size:17px;line-height:1;color:var(--ink3);transition:transform .15s;align-self:center}
+.koe-g[open]>summary::before{transform:rotate(90deg)}
+.koe-g h3{margin:0;font-size:15.5px;font-weight:500;letter-spacing:.01em}
+.koe-g .tal{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.koe-g .tal b{font-weight:600;color:var(--ink)}
+.koe-g .grund{flex:1 1 100%;font-size:12.5px;color:var(--ink3);margin:2px 0 0 22px}
+.koe-g[data-g="ingenpo"]{border-left-color:var(--late)}
+.koe-g[data-g="po"]{border-left-color:var(--accent)}
+.koe-g[data-g="flyt"]{border-left-color:var(--flyt)}
+.koe-g[data-g="hel"]{border-left-color:var(--flyt)}
+.koe-g[data-g="butik"]{border-left-color:var(--butik)}
+.koe-g[data-g="klar"]{border-left-color:var(--today)}
+.koe-alder{font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--panel2);color:var(--ink2);white-space:nowrap}
+.koe-alder.mid{background:var(--tom-bg);color:var(--tom)}
+.koe-alder.kritisk{background:var(--late-bg);color:var(--late);font-weight:500}
+.koe-ordre{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:9px 18px;border-top:1px solid var(--line2)}
+.koe-ordre .nr{font-family:var(--mono);font-size:13px;white-space:nowrap}
+.koe-ordre .varer{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.koe-ordre .hoejre{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.koe-vare{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink2);background:var(--panel2);border:1px solid var(--line2);border-radius:99px;padding:2px 11px 2px 2px;max-width:100%}
+.koe-vare img{width:26px;height:32px;object-fit:cover;border-radius:99px;flex:none}
+.koe-vare .intet{width:26px;height:32px;border-radius:99px;background:var(--line2);flex:none}
+.koe-vare span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.koe-vare b{font-weight:600;color:var(--ink)}
+.po-knap{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--panel);color:var(--link);border-radius:99px;padding:2px 10px;cursor:pointer}
+.po-knap:hover{border-color:var(--accent)}
+.koe-mere{width:100%;text-align:left;font:inherit;font-size:13px;color:var(--link);background:none;border:0;border-top:1px solid var(--line2);padding:10px 18px;cursor:pointer}
+.koe-mere:hover{background:var(--panel2)}
+@media (max-width:760px){
+  .koe-ordre{grid-template-columns:auto auto;padding:10px 14px}
+  .koe-ordre .varer,.koe-ordre .hoejre{grid-column:1/-1;justify-content:flex-start}
+  .koe-g>summary{padding:12px 14px}
+}
 .empty{padding:28px;text-align:center;color:var(--ink3);background:var(--panel);border:1px dashed var(--line);border-radius:var(--radius)}
 footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
 
@@ -285,6 +321,7 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
+    <button role="tab" id="tab-koe" aria-selected="false" data-tab="koe">Ordrer i kø</button>
     <button role="tab" id="tab-allepo" aria-selected="false" data-tab="allepo">Alle PO'er</button>
     <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
     <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
@@ -368,7 +405,7 @@ async function nyVersion() {
 }
 async function tjek() {
   if (document.visibilityState !== 'visible') return;
-  if (document.querySelector('details[open]') || document.activeElement.matches('input')) return;
+  if (document.querySelector('details.lok[open], details[data-po][open]') || document.activeElement.matches('input')) return;
   if (await nyVersion()) location.reload();
 }
 nyVersion();
@@ -780,14 +817,95 @@ function visKunHel(){
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(KH.length?'Ingen varer matcher.':'Ingen varer ligger kun i Helsinge.')+'</div>');
 }
 
+// ---------------------------------------------------------------- Ordrer i kø
+// Hver åben ordre står ét sted: under den vigtigste grund til, at den ikke er sendt.
+const KOE = D.koe || [];
+const KOE_ORDEN = ['ingenpo','po','flyt','hel','butik','klar'];
+const KOE_INFO = {
+  ingenpo:{navn:'Venter på varer uden indkøbsordre', grund:'Ordren venter på varer, som ingen åben PO har. Her skal der bestilles eller findes en anden løsning.'},
+  po:     {navn:'Venter på varer på en indkøbsordre', grund:'Presell: varerne kommer med en åben PO. Datoen er den seneste af de PO\'er, ordren venter på – før den er ordren ikke komplet.'},
+  flyt:   {navn:'Skal flyttes fra Helsinge', grund:'Ordren kan ikke pakkes samlet i Ramløse. Noget skal flyttes fra Helsinge først.'},
+  hel:    {navn:'Pakkes i Helsinge', grund:'Alle varer i ordren ligger i Helsinge.'},
+  butik:  {navn:'Skal hentes i butikken', grund:'En vare ligger hverken på Lager Ramløse eller i Helsinge, men står i butikken i Ramløse.'},
+  klar:   {navn:'Klar til pak i Ramløse', grund:'Ingen hindring – alt kan plukkes på Lager Ramløse. Er en af dem gammel, er der noget galt.'},
+};
+const koeVenter = KOE.filter(o=>o.g!=='klar').length;
+let koeGl = false;
+const koeAlle = new Set();
+let aabneKoe = new Set(['ingenpo','po']);
+try { const g = localStorage.getItem('lv_koe'); if (g) aabneKoe = new Set(JSON.parse(g)); } catch(_){}
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.matches || !d.matches('details.koe-g')) return;
+  if (d.open) aabneKoe.add(d.dataset.g); else aabneKoe.delete(d.dataset.g);
+  try { localStorage.setItem('lv_koe', JSON.stringify([...aabneKoe])); } catch(_){}
+}, true);
+
+// Alder: 14 dage eller mere er kritisk, 7-13 dage er på vej derhen.
+function koeAlder(t){
+  const n = dageSiden(t);
+  return '<span class="koe-alder'+(n>=14?' kritisk':(n>=7?' mid':''))+'">'+(n<=0?'i dag':n+' d')+'</span>';
+}
+
+function koeVare(v){
+  const navn = [v.navn, v.farve].filter(Boolean).join(' · ');
+  return '<span class="koe-vare" title="'+esc(navn+(v.str?' · str. '+v.str:'')+' · '+v.sku)+'">'+
+    (v.img?'<img src="'+esc(IMG(v.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="26" height="32">':'<i class="intet"></i>')+
+    '<span>'+esc(navn)+(v.str?' <b>'+esc(v.str)+'</b>':'')+(v.q>1?' · '+nf(v.q)+' stk':'')+'</span></span>';
+}
+
+function visKoe(){
+  const q = state.q;
+  const passer = o => (!koeGl || dageSiden(o.t) >= 7) &&
+    (!q || (o.n+' '+(o.po||'')+' '+(o.varer||[]).map(v=>v.sku+' '+v.navn+' '+v.farve+' '+v.str).join(' ')).toLowerCase().includes(q));
+  const valgt = KOE.filter(passer);
+  const stkVenter = KOE.filter(o=>o.g!=='klar').reduce((a,o)=>a+o.stk,0);
+  const aeldste = KOE.filter(o=>o.g!=='klar')[0];
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(koeVenter)+'</b><span>åbne ordrer venter på noget</span></div>'+
+    '<div><b class="num">'+nf(stkVenter)+'</b><span>stk i de ordrer</span></div>'+
+    '<div><b class="num">'+(aeldste?dageSiden(aeldste.t)+' dage':'–')+'</b><span>har den ældste ventet</span></div>'+
+    '<div><b class="num">'+nf(KOE.filter(o=>o.g==='klar').length)+'</b><span>ordrer kan pakkes i Ramløse nu</span></div></div>';
+  const raekke = o => {
+    let hoejre;
+    if (o.g === 'po') hoejre = (o.dato?datoBadge(o.dato):'')+'<button type="button" class="po-knap" data-goto="'+o.po+'">PO '+o.po+'</button>'+nf(o.q)+' stk';
+    else if (o.g === 'ingenpo') hoejre = '<span class="badge b-late">Ingen PO</span>'+nf(o.q)+' stk mangler';
+    else if (o.g === 'flyt') hoejre = nf(o.q)+' stk fra Helsinge';
+    else if (o.g === 'hel') hoejre = nf(o.q)+' stk i Helsinge';
+    else if (o.g === 'butik') hoejre = nf(o.q)+' stk i butikken';
+    else hoejre = nf(o.stk)+' stk klar';
+    const v = (o.varer||[]).map(koeVare).join('')+(o.flere?'<span class="koe-vare" style="padding-left:11px"><span>+'+o.flere+' mere</span></span>':'');
+    return '<div class="koe-ordre"><span class="nr">'+ordA(o)+'</span>'+koeAlder(o.t)+
+      '<span class="varer">'+v+'</span><span class="hoejre">'+hoejre+'</span></div>';
+  };
+  const grupper = KOE_ORDEN.map(g => {
+    const liste = valgt.filter(o=>o.g===g);
+    if (!liste.length) return '';
+    const i = KOE_INFO[g];
+    const stk = liste.reduce((a,o)=>a+(g==='klar'?o.stk:o.q||o.stk),0);
+    const vis = koeAlle.has(g) ? liste : liste.slice(0,25);
+    return '<details class="koe-g" data-g="'+g+'"'+(aabneKoe.has(g)?' open':'')+'><summary>'+
+      '<h3>'+esc(i.navn)+'</h3>'+
+      '<span class="tal"><b>'+nf(liste.length)+'</b> '+(liste.length===1?'ordre':'ordrer')+' · <b>'+nf(stk)+'</b> stk · ældste <b>'+dageSiden(liste[0].t)+' d</b></span>'+
+      '<span class="grund">'+esc(i.grund)+'</span></summary>'+
+      vis.map(raekke).join('')+
+      (liste.length>vis.length?'<button type="button" class="koe-mere" data-koe-mere="'+g+'">Vis alle '+nf(liste.length)+' ordrer →</button>':'')+
+      '</details>';
+  }).join('');
+  return sum+'<p class="hint">Alle åbne ordrer, der ikke er sendt – hver ordre står ét sted, under den vigtigste grund. Ældste ordre øverst i hver gruppe. Ordrenumre åbner ordren i SmartPack. Ordrer fra butikken (POS) er ikke med.</p>'+
+    '<div class="knaprad"><button type="button" class="filter-knap" id="koe-gl" aria-pressed="'+koeGl+'">Kun ordrer over 7 dage</button>'+
+    '<button type="button" class="filter-knap" id="koe-fold">'+(aabneKoe.size?'Fold alle sammen':'Fold alle ud')+'</button></div>'+
+    (grupper || '<div class="empty">'+(KOE.length?'Ingen ordrer matcher.':'Ingen åbne ordrer.')+'</div>');
+}
+
 function render(){
   $('#stats').innerHTML = statsHtml();
   document.querySelectorAll('nav.tabs button').forEach(b=>{
     const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
+    const c = {prio:D.po.length, koe:koeVenter, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
     b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
   });
-  $('#view').innerHTML = ({prio:visPrio, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
@@ -801,6 +919,11 @@ document.addEventListener('click', e=>{
   const as = e.target.closest('[data-ap-sort]');
   if (as){ const k = as.dataset.apSort; state.apSort = state.apSort.k===k ? {k, dir:-state.apSort.dir} : {k, dir: (k==='lev'||k==='dato'||k==='bestilt')?1:-1}; render(); return; }
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
+  if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
+  if (e.target.closest('#koe-fold')){ const luk = aabneKoe.size>0; aabneKoe = new Set(luk?[]:KOE_ORDEN);
+    try{localStorage.setItem('lv_koe', JSON.stringify([...aabneKoe]))}catch(_){} render(); return; }
+  const km = e.target.closest('[data-koe-mere]');
+  if (km){ koeAlle.add(km.dataset.koeMere); render(); return; }
   if (e.target.closest('#alle-lok')){ alleLok = !alleLok; if (!alleLok) aabneLok.clear(); render(); return; }
   const s = e.target.closest('[data-span]');
   if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab!=='prio'&&state.tab!=='varer') state.tab='prio'; render(); return; }

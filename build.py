@@ -454,6 +454,67 @@ def beregn_butik(klass):
     return ud
 
 
+# Ordrer i kø: hver åben ordre får én grund til, at den ikke er sendt – den værste først.
+#   ingenpo  presell-varer, som ingen åben indkøbsordre har        (kræver handling)
+#   po       presell-varer, der kommer på en åben indkøbsordre
+#   flyt     kan ikke pakkes samlet – noget skal flyttes fra Helsinge
+#   hel      hele ordren pakkes i Helsinge
+#   butik    en vare findes kun i butikken i Ramløse
+#   klar     ingen hindring – alt kan plukkes på Lager Ramløse
+KOE_ORDEN = ["ingenpo", "po", "flyt", "hel", "butik", "klar"]
+
+
+def beregn_ordrekoe(klass, var_po):
+    """Åbne ordrer grupperet efter, hvad de venter på. Ældste ordre først i hver gruppe."""
+    ud = []
+    for o, k in klass:
+        ikke_sendt = sum(l["q"] for l in k["linjer"])
+        if ikke_sendt <= 0:
+            continue
+        e = {"id": gid_id(o["id"]), "n": o["name"], "t": o["createdAt"],
+             "stk": tal(ikke_sendt), "linjer": len(k["linjer"])}
+        if k["presell"]:
+            datoer, uden = [], False
+            for l in k["presell"]:
+                po = var_po.get(l["vid"])
+                if po:
+                    datoer.append(po[0])       # (dato, po-id) – tidligste PO med varen
+                else:
+                    uden = True
+            e["g"] = "ingenpo" if uden else "po"
+            if not uden and datoer:
+                dato, pid = max(datoer)        # ordren kan først sendes, når den sidste vare er hjemme
+                e["dato"], e["po"] = dato, pid
+            vigtige = k["presell"]
+            e["q"] = tal(sum(l["q"] for l in k["presell"]))
+            e["mangler"] = sum(1 for l in k["presell"] if l["vid"] not in var_po)
+        elif k["pak"] == "FlereLagre":
+            e["g"] = "flyt"
+            vigtige = [l for l in k["lager"] if l["lager_stk"] <= 0 and l["hel"] > 0]
+            e["q"] = tal(sum(l["q"] for l in vigtige))
+        elif k["pak"] == "PAK_Helsinge":
+            e["g"] = "hel"
+            vigtige = k["lager"]
+            e["q"] = tal(sum(l["q"] for l in k["lager"]))
+        else:
+            butik = [l for l in k["lager"] if l["butik_stk"] > 0 and l["lager_stk"] <= 0 and l["hel"] <= 0]
+            if butik:
+                e["g"] = "butik"
+                vigtige = butik
+                e["q"] = tal(sum(l["q"] for l in butik))
+            else:
+                e["g"] = "klar"
+                vigtige = []
+                e["q"] = 0
+        if vigtige:
+            e["varer"] = [dict(vare_info(l), q=tal(l["q"])) for l in vigtige[:4]]
+            if len(vigtige) > 4:
+                e["flere"] = len(vigtige) - 4
+        ud.append(e)
+    ud.sort(key=lambda e: (KOE_ORDEN.index(e["g"]), e["t"]))
+    return ud
+
+
 def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
     # PO'er i et enkelt format
     pos = []
@@ -605,6 +666,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
         "flyt": beregn_flyt(klass),
         "butik": beregn_butik(klass),
         "kun_hel": beregn_kun_helsinge(lager or {}, detaljer or {}, klass),
+        "koe": beregn_ordrekoe(klass, var_po),
     }
 
 
@@ -673,6 +735,8 @@ def main():
         f"({sum(g['stk'] for g in d['kun_hel'])} stk) i {len(d['kun_hel'])} produkter")
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
+    koe = collections.Counter(o["g"] for o in d["koe"])
+    log("Ordrer i kø: " + " · ".join(f"{g} {koe.get(g, 0)}" for g in KOE_ORDEN))
 
     komprimer_billeder(d)
     blob = krypter(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), adgangskode)
