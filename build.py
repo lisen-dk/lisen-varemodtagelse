@@ -41,7 +41,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -170,6 +170,101 @@ def hent_varer(skus):
     return {r.get("sku"): r for r in rows if r.get("sku")}
 
 
+# ---------------------------------------------------------------- salg de sidste dage
+
+# SmartPacks ordreliste kan ikke filtreres på dato, og en side dybt nede i listen tager ca. 12 sekunder.
+# Derfor tælles salget op lidt ad gangen og gemmes i state/salg.json (GitHub-cache mellem kørsler):
+#   - forfra:  de nyeste sider, indtil vi møder ordrer, vi allerede har talt med
+#   - bagud:   nogle få sider længere nede, indtil de sidste SALG_DAGE er dækket
+SALG_DAGE = int(os.environ.get("SALG_DAGE") or 14)
+SALG_FORFRA = int(os.environ.get("SALG_FORFRA") or 3)     # højst så mange nye sider pr. kørsel
+SALG_BAGUD = int(os.environ.get("SALG_BAGUD") or 2)       # højst så mange sider bagud pr. kørsel
+SALG_FIL = os.path.join(HER, "state", "salg.json")
+SALG_STATES = "5,6"   # 5 = pakket, 6 = afsluttet
+
+
+def _salg_side(nr):
+    return sp_get(f"/order/list/?orderType=1&state={SALG_STATES}&pageSize=300&p={nr}").get("data") or []
+
+
+def _salg_tael(ordrer, gemt, graense):
+    """Lægger nye ordrer til optællingen. Returnerer (nye ordrer, ældste dato på siden)."""
+    nye, aeldst = 0, ""
+    for o in ordrer:
+        dag = (o.get("orderDate") or "")[:10]
+        if dag and (not aeldst or dag < aeldst):
+            aeldst = dag
+        oid = str(o.get("id"))
+        if not dag or dag < graense or oid in gemt["ordrer"] or o.get("isReturn"):
+            continue
+        gemt["ordrer"][oid] = dag
+        dagbog = gemt["dage"].setdefault(dag, {})
+        for it in o.get("items") or []:
+            if it.get("type") == 1:      # NonItem (fragt, gebyr)
+                continue
+            sku = (it.get("sku") or "").strip()
+            antal = tal(it.get("qty"))
+            if sku and antal > 0:
+                dagbog[sku] = dagbog.get(sku, 0) + antal
+        nye += 1
+    return nye, aeldst
+
+
+def hent_salg():
+    """sku -> solgte stk de sidste SALG_DAGE dage. Tælles op lidt ad gangen mellem kørslerne."""
+    if TEST_DIR:
+        sti = os.path.join(TEST_DIR, "salg.json")
+        solgt = json.load(open(sti)) if os.path.exists(sti) else {}
+        return {"solgt": solgt, "dage": SALG_DAGE, "daekket": SALG_DAGE if solgt else 0}
+    graense = (datetime.now(timezone.utc) - timedelta(days=SALG_DAGE)).strftime("%Y-%m-%d")
+    gemt = {"dage": {}, "ordrer": {}, "bagud": 2, "faerdig": False}
+    try:
+        gemt.update(json.load(open(SALG_FIL)))
+    except Exception:
+        pass
+    # gamle dage ud af vinduet
+    gemt["dage"] = {d: v for d, v in gemt["dage"].items() if d >= graense}
+    gemt["ordrer"] = {o: d for o, d in gemt["ordrer"].items() if d >= graense}
+
+    nye_i_alt, sider = 0, 0
+    for nr in range(1, SALG_FORFRA + 1):
+        nye, _ = _salg_tael(_salg_side(nr), gemt, graense)
+        sider += 1
+        nye_i_alt += nye
+        if not nye:            # siden er allerede talt med – resten længere nede er det også
+            break
+    # bagud, indtil vinduet er dækket – derefter holder de nyeste sider det ved lige
+    if not gemt.get("faerdig") and (not gemt["dage"] or min(gemt["dage"]) > graense):
+        nr = max(2, tal(gemt.get("bagud")) or 2)
+        for _ in range(SALG_BAGUD):
+            side = _salg_side(nr)
+            sider += 1
+            if not side:
+                gemt["faerdig"] = True
+                break
+            nye, aeldst = _salg_tael(side, gemt, graense)
+            nye_i_alt += nye
+            nr += 1
+            gemt["bagud"] = nr
+            if aeldst and aeldst < graense:
+                gemt["faerdig"] = True
+                break
+    gemt["hentet"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        os.makedirs(os.path.dirname(SALG_FIL), exist_ok=True)
+        json.dump(gemt, open(SALG_FIL, "w"), separators=(",", ":"))
+    except Exception as e:
+        log(f"Kunne ikke gemme salgstal: {e}")
+    solgt = collections.Counter()
+    for dagbog in gemt["dage"].values():
+        solgt.update(dagbog)
+    dage = sorted(gemt["dage"])
+    daekket = (datetime.now(timezone.utc).date() - date.fromisoformat(dage[0])).days + 1 if dage else 0
+    log(f"Salg: {len(gemt['ordrer'])} ordrer · {len(solgt)} varer · {sum(solgt.values())} stk "
+        f"· {daekket} af {SALG_DAGE} dage dækket · {sider} nye sider ({nye_i_alt} nye ordrer)")
+    return {"solgt": dict(solgt), "dage": SALG_DAGE, "daekket": daekket}
+
+
 def lille_billede(url):
     """Shopify-CDN-billeder hentes i thumbnail-størrelse."""
     if url and "cdn.shopify.com" in url and "width=" not in url:
@@ -281,7 +376,7 @@ def str_noegle(s):
         return (2, 0, s)
 
 
-def beregn_kun_helsinge(lager, varer, klass):
+def beregn_kun_helsinge(lager, varer, klass, salg=None):
     """Produkter med varianter, der KUN ligger i Helsinge (intet på Lager Ramløse eller i butikken)."""
     efterspurgt = collections.defaultdict(lambda: {"stk": 0, "ordrer": {}})
     for o, k in klass:
@@ -307,7 +402,8 @@ def beregn_kun_helsinge(lager, varer, klass):
         g["ord_stk"] += e["stk"]
         g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
         g["varianter"].append({"sku": sku, "str": v.get("variantName") or "", "stk": tal(stk["helsinge"]),
-                               "res": tal(v.get("reservedCombined")), "ord": tal(e["stk"])})
+                               "res": tal(v.get("reservedCombined")), "ord": tal(e["stk"]),
+                               "solgt": tal((salg or {}).get(sku))})
         for h, a in hylder["helsinge"]:
             g["_hylder"][h] += a
         g["_ordrer"].update(e["ordrer"])
@@ -315,6 +411,7 @@ def beregn_kun_helsinge(lager, varer, klass):
     for g in grupper.values():
         g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
         g["hylder"] = [[h, tal(a)] for h, a in g.pop("_hylder").most_common(8)]
+        g["solgt"] = tal(sum(v["solgt"] for v in g["varianter"]))
         ordrer = sorted(g.pop("_ordrer").values(), key=lambda x: x["t"])
         g["antal_ordrer"] = len(ordrer)
         g["ordrer"] = [{"id": x["id"], "n": x["n"]} for x in ordrer[:12]]
@@ -375,7 +472,7 @@ def klassificer(o):
             "pak": pak, "single": antal_stk == 1}
 
 
-def beregn_flyt(klass):
+def beregn_flyt(klass, detaljer=None):
     """Ordrer, der ligger på to lagre, og de Helsinge-varer, der skal flyttes."""
     ordrer_ud, varer = [], {}
     for o, k in klass:
@@ -397,6 +494,7 @@ def beregn_flyt(klass):
             navn, farve = navn_farve(grund)
             e = varer.setdefault(vid, {
                 "vid": vid, "sku": l["sku"], "navn": navn, "farve": farve,
+                "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
                 "str": titel, "img": ((li.get("image") or {}).get("url")) or "",
                 "stk": 0, "hel_stk": l["hel"], "hylder": sorted(l["hylder"], key=lambda h: -h[1])[:6],
                 "ordrer": [], "aeldst": o["createdAt"],
@@ -408,17 +506,41 @@ def beregn_flyt(klass):
     return {"ordrer": ordrer_ud, "varer": sorted(varer.values(), key=lambda x: (-x["stk"], x["aeldst"], x["sku"]))}
 
 
-def vare_info(l):
+def vare_info(l, detaljer=None):
     li, v = l["li"], l["v"]
     navn_str = li.get("name") or ""
     titel = v.get("title") or ""
     grund = navn_str[: -len(" - " + titel)] if titel and navn_str.endswith(" - " + titel) else navn_str
     navn, farve = navn_farve(grund)
     return {"vid": l["vid"], "sku": l["sku"], "navn": navn, "farve": farve, "str": titel,
+            "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
             "img": ((li.get("image") or {}).get("url")) or ""}
 
 
-def beregn_butik(klass):
+def beregn_helsinge(klass, detaljer=None):
+    """Ordrer, der kan pakkes færdige i Helsinge, og de varer, de indeholder."""
+    ordrer, varer = [], {}
+    for o, k in klass:
+        if k["presell"] or k["pak"] != "PAK_Helsinge":
+            continue
+        oid = gid_id(o["id"])
+        ordrer.append({"id": oid, "n": o["name"], "t": o["createdAt"],
+                       "stk": tal(sum(l["q"] for l in k["lager"])), "linjer": len(k["lager"])})
+        for l in k["lager"]:
+            e = varer.setdefault(l["vid"], dict(vare_info(l, detaljer), stk=0, ordrer=0,
+                                                hel_stk=l["hel"],
+                                                hylder=sorted(l["hylder"], key=lambda h: -h[1])[:6],
+                                                aeldst=o["createdAt"]))
+            e["stk"] += l["q"]
+            e["ordrer"] += 1
+            e["aeldst"] = min(e["aeldst"], o["createdAt"])
+    ordrer.sort(key=lambda x: x["t"])
+    for e in varer.values():
+        e["stk"] = tal(e["stk"])
+    return {"ordrer": ordrer, "varer": sorted(varer.values(), key=lambda x: (-x["stk"], x["aeldst"]))}
+
+
+def beregn_butik(klass, detaljer=None):
     """Varer, der skal hentes i butikken i Ramløse til webshop-ordrer.
 
     Butikken er altid sidste mulighed: så længe varen kan plukkes på Lager Ramløse eller
@@ -433,7 +555,7 @@ def beregn_butik(klass):
                 continue
             e = varer.get(l["vid"])
             if e is None:
-                e = varer[l["vid"]] = dict(vare_info(l), lager_stk=l["lager_stk"], hel_stk=l["hel"], butik_stk=l["butik_stk"],
+                e = varer[l["vid"]] = dict(vare_info(l, detaljer), lager_stk=l["lager_stk"], hel_stk=l["hel"], butik_stk=l["butik_stk"],
                                            hylder=sorted(l["butik_hylder"], key=lambda h: -h[1])[:6],
                                            klar=0, senere=0, ordrer=[], aeldst=o["createdAt"])
             e["klar" if klar else "senere"] += l["q"]
@@ -464,7 +586,7 @@ def beregn_butik(klass):
 KOE_ORDEN = ["ingenpo", "po", "flyt", "hel", "butik", "klar"]
 
 
-def beregn_ordrekoe(klass, var_po):
+def beregn_ordrekoe(klass, var_po, detaljer=None):
     """Åbne ordrer grupperet efter, hvad de venter på. Ældste ordre først i hver gruppe."""
     ud = []
     for o, k in klass:
@@ -507,7 +629,7 @@ def beregn_ordrekoe(klass, var_po):
                 vigtige = []
                 e["q"] = 0
         if vigtige:
-            e["varer"] = [dict(vare_info(l), q=tal(l["q"])) for l in vigtige[:4]]
+            e["varer"] = [dict(vare_info(l, detaljer), q=tal(l["q"])) for l in vigtige[:4]]
             if len(vigtige) > 4:
                 e["flere"] = len(vigtige) - 4
         ud.append(e)
@@ -515,7 +637,7 @@ def beregn_ordrekoe(klass, var_po):
     return ud
 
 
-def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
+def beregn(raw_po, raw_ordrer, lager=None, detaljer=None, salg=None):
     # PO'er i et enkelt format
     pos = []
     for p in raw_po:
@@ -663,10 +785,12 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None):
     return {
         "hentet": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "po": ud_po, "alle_po": alle_po, "varer": varer, "uden_po": uden, "forsalg_ordrer": len(ordrer),
-        "flyt": beregn_flyt(klass),
-        "butik": beregn_butik(klass),
-        "kun_hel": beregn_kun_helsinge(lager or {}, detaljer or {}, klass),
-        "koe": beregn_ordrekoe(klass, var_po),
+        "flyt": beregn_flyt(klass, detaljer),
+        "butik": beregn_butik(klass, detaljer),
+        "kun_hel": beregn_kun_helsinge(lager or {}, detaljer or {}, klass, (salg or {}).get("solgt")),
+        "helsinge": beregn_helsinge(klass, detaljer),
+        "salg": {"dage": (salg or {}).get("dage", 0), "daekket": (salg or {}).get("daekket", 0)},
+        "koe": beregn_ordrekoe(klass, var_po, detaljer),
     }
 
 
@@ -725,7 +849,8 @@ def main():
     log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
         f"{len(alle_skus & set(varer))} af {len(alle_skus)} varer med detaljer")
 
-    d = beregn(raw_po, raw_ordrer, lager, varer)
+    salg = hent_salg()
+    d = beregn(raw_po, raw_ordrer, lager, varer, salg)
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
@@ -735,6 +860,8 @@ def main():
         f"({sum(g['stk'] for g in d['kun_hel'])} stk) i {len(d['kun_hel'])} produkter")
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
+    log(f"Helsinge: {len(d['helsinge']['ordrer'])} ordrer kan pakkes i Helsinge "
+        f"({len(d['helsinge']['varer'])} varianter)")
     koe = collections.Counter(o["g"] for o in d["koe"])
     log("Ordrer i kø: " + " · ".join(f"{g} {koe.get(g, 0)}" for g in KOE_ORDEN))
 

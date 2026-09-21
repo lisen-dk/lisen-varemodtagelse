@@ -28,12 +28,27 @@ jobs:
       - name: Installer kryptering
         run: pip install --quiet cryptography
 
+      # Salget de sidste 14 dage tælles op lidt ad gangen og genbruges mellem kørslerne
+      - name: Hent tidligere salgstal
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: salg-${{ github.run_id }}
+          restore-keys: salg-
+
       - name: Hent tal og byg siden
         env:
           SMARTPACK_APP_ID: ${{ secrets.SMARTPACK_APP_ID }}
           SMARTPACK_TOKEN: ${{ secrets.SMARTPACK_TOKEN }}
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
         run: python3 build.py
+
+      - name: Gem salgstal
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: salg-${{ github.run_id }}
 
       - uses: actions/upload-pages-artifact@v4
         with:

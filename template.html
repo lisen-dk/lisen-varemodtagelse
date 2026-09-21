@@ -246,6 +246,31 @@ td.thumb{width:48px;padding-right:0}
 .koe-g[data-g="hel"]{border-left-color:var(--flyt)}
 .koe-g[data-g="butik"]{border-left-color:var(--butik)}
 .koe-g[data-g="klar"]{border-left-color:var(--today)}
+.hels-panel{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--flyt);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+.hels-panel h2{margin:0;font-size:18px;font-weight:500;letter-spacing:.01em}
+.hels-panel h2 small{font-size:12px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--flyt);display:block;margin-bottom:5px}
+.hels-panel.b2{border-left-color:var(--accent)}
+.hels-panel.b2 h2 small{color:var(--accent)}
+.hels-panel.b3{border-left-color:var(--butik)}
+.hels-panel.b3 h2 small{color:var(--butik)}
+.hels-top{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:baseline;margin:12px 0}
+.hels-tal{display:flex;flex-direction:column;min-width:96px}
+.hels-tal b{font-size:26px;font-weight:400;line-height:1.1;font-variant-numeric:tabular-nums}
+.hels-tal span{font-size:12.5px;color:var(--ink2)}
+.hels-tal.kritisk b{color:var(--late)}
+.hels-und{font-size:13px;color:var(--ink2);margin:0 0 8px;font-weight:500}
+.hvarer{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:8px}
+.hvarer.bred{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.hvare{display:flex;gap:9px;align-items:center;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--radius-s);padding:6px 10px 6px 6px;min-width:0}
+.hvare img,.hvare .intet{width:38px;height:48px;object-fit:cover;border-radius:6px;background:var(--line2);flex:none;display:block}
+.hvare .txt{min-width:0;font-size:12px;color:var(--ink3);line-height:1.35}
+.hvare .txt b{display:block;color:var(--ink);font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hvare .antal{margin-left:auto;text-align:right;font-family:var(--mono);font-size:15px;color:var(--ink);white-space:nowrap}
+.hvare .antal small{display:block;font-family:var(--sans);font-size:10.5px;color:var(--ink3)}
+.hvare.varm{border-color:var(--accent);background:var(--accent-soft)}
+.hels-ordrer{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.hels-ordre{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:2px 11px;font-size:12.5px;background:var(--panel)}
+.hels-ordre .nr{font-family:var(--mono);font-size:12.5px}
 .koe-alder{font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--panel2);color:var(--ink2);white-space:nowrap}
 .koe-alder.mid{background:var(--tom-bg);color:var(--tom)}
 .koe-alder.kritisk{background:var(--late-bg);color:var(--late);font-weight:500}
@@ -258,6 +283,7 @@ td.thumb{width:48px;padding-right:0}
 .koe-vare .intet{width:26px;height:32px;border-radius:99px;background:var(--line2);flex:none}
 .koe-vare span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .koe-vare b{font-weight:600;color:var(--ink)}
+.koe-vare .mk,.hvare .mk{font-style:normal;font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:1px 8px;white-space:nowrap;flex:none}
 .po-knap{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--panel);color:var(--link);border-radius:99px;padding:2px 10px;cursor:pointer}
 .po-knap:hover{border-color:var(--accent)}
 .koe-mere{width:100%;text-align:left;font:inherit;font-size:13px;color:var(--link);background:none;border:0;border-top:1px solid var(--line2);padding:10px 18px;cursor:pointer}
@@ -322,6 +348,7 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
     <button role="tab" id="tab-koe" aria-selected="false" data-tab="koe">Ordrer i kø</button>
+    <button role="tab" id="tab-hels" aria-selected="false" data-tab="hels">Helsinge</button>
     <button role="tab" id="tab-allepo" aria-selected="false" data-tab="allepo">Alle PO'er</button>
     <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
     <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
@@ -526,7 +553,7 @@ $('#fresh').innerHTML = 'Opdateret <b>'+fmtTid(D.hentet)+'</b>'+(alderMin>=120?'
 if (alderMin >= 120) $('#fresh').classList.add('gammel');
 $('#foot').innerHTML = 'Prioritet: forsendelser med ventende presell-ordrer står øverst, sorteret efter hvor længe den ældste ordre har ventet. Derefter forsendelser med presell uden ordrer og til sidst resten efter dato. '+
   'En ordre tælles under den tidligste åbne PO med den bestilte vare (PO-linjer markeret presell først). Presell-ordrer er ordrer med varer, som SmartPack selv melder, at de venter på ("venter på lager" eller "udsolgt") – '+nf(D.forsalg_ordrer)+' ordrer. '+
-  'Alle tal hentes direkte fra SmartPack og opdateres, når SmartPack melder ændringer (og mindst hver halve time). Siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack.';
+  'Alle tal hentes direkte fra SmartPack og opdateres, når SmartPack melder ændringer (højst én gang hvert 10. minut, og mindst hver halve time). Siden henter selv de nye tal. Ordrenumre åbner ordren i SmartPack.';
 
 // Tilstand
 const state = { tab:'prio', span:null, q:'', sort:{k:'aeldst',dir:1}, bare:false };
@@ -742,7 +769,7 @@ function visFlyt(){
     const ord = x.ordrer.map(o=>ordA(o)+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
     return '<div class="flytvare">'+kortBillede(x.img)+
       '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
-      '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.hel_stk)+' stk i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
+      '<div class="meta">'+(x.maerke?'<span>'+esc(x.maerke)+'</span>':'')+'<span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.hel_stk)+' stk i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
       lokationer('flyt:'+x.sku, x.hylder)+
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
@@ -773,7 +800,7 @@ function visButik(){
     const ord = x.ordrer.map(o=>ordA(o)+(o.q>1?' ('+o.q+' stk)':'')+(o.presell?'<span class="smalltag">venter på presell</span>':'')).join(' ');
     return '<div class="flytvare">'+kortBillede(x.img)+
       '<div><h3>'+esc(x.navn)+(x.farve?' <small>· '+esc(x.farve)+'</small>':'')+'</h3>'+
-      '<div class="meta"><span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.butik_stk)+' stk i butikken · '+nf(x.lager_stk)+' på Lager Ramløse · '+nf(x.hel_stk)+' i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
+      '<div class="meta">'+(x.maerke?'<span>'+esc(x.maerke)+'</span>':'')+'<span>Str. <b>'+esc(x.str)+'</b></span><span class="sku">'+esc(x.sku)+'</span><span>'+nf(x.butik_stk)+' stk i butikken · '+nf(x.lager_stk)+' på Lager Ramløse · '+nf(x.hel_stk)+' i Helsinge</span><span>Ældste ordre '+alderTxt(x.aeldst)+'</span></div>'+
       '<div class="hylder">'+x.hylder.map(h=>'<span class="hylde" title="'+esc(h[0])+'">'+esc(h[0].replace(/^Hall /,''))+' — '+nf(h[1])+' stk</span>').join('')+'</div>'+
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.nu)+'</b><span>stk hentes nu</span>'+(x.senere_butik?'<small>+ '+nf(x.senere_butik)+' senere</small>':'')+'</div></div>';
@@ -812,7 +839,12 @@ function visKunHel(){
       ord+'</div>'+
       '<div class="flytantal"><b class="num">'+nf(g.stk)+'</b><span>stk i Helsinge</span></div></div>';
   };
-  return sum+'<p class="hint">Varer, der ligger i Helsinge (Hel-1, Hel-2 …), men hverken på Lager Ramløse eller i butikken. Én linje pr. produkt og farve; tallet ved hver størrelse er antal i Helsinge (flere farver af samme størrelse er lagt sammen), og størrelser med lilla kant er i åbne ordrer. Flest stk øverst. Karantæne og returkasser tæller ikke som lager.</p>'+
+  const bf = borFlyttes(6);
+  const top = bf.liste.length ? '<div class="hels-panel b3" style="border-left-color:var(--accent)">'+
+      '<p class="hels-und" style="margin:0 0 8px">Bør flyttes til Ramløse – '+(bf.har?'sælger mest de sidste '+SALG.dage+' dage':'flest i åbne ordrer')+
+      (bf.har&&SALG.daekket<SALG.dage?' (salgstal dækker indtil videre '+SALG.daekket+' dage)':'')+'</p>'+
+      '<div class="hvarer bred">'+bf.liste.map(borFlyttesKort).join('')+'</div></div>' : '';
+  return sum+top+'<p class="hint">Varer, der ligger i Helsinge (Hel-1, Hel-2 …), men hverken på Lager Ramløse eller i butikken. Én linje pr. produkt og farve; tallet ved hver størrelse er antal i Helsinge (flere farver af samme størrelse er lagt sammen), og størrelser med lilla kant er i åbne ordrer. Flest stk øverst. Karantæne og returkasser tæller ikke som lager.</p>'+
     '<div class="knaprad"><button type="button" class="filter-knap" id="kh-filter" aria-pressed="'+khKunOrdrer+'">Kun produkter i åbne ordrer ('+nf(khOrd.length)+')</button>'+lokKnap()+'</div>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(KH.length?'Ingen varer matcher.':'Ingen varer ligger kun i Helsinge.')+'</div>');
 }
@@ -849,8 +881,9 @@ function koeAlder(t){
 
 function koeVare(v){
   const navn = [v.navn, v.farve].filter(Boolean).join(' · ');
-  return '<span class="koe-vare" title="'+esc(navn+(v.str?' · str. '+v.str:'')+' · '+v.sku)+'">'+
+  return '<span class="koe-vare" title="'+esc((v.maerke?v.maerke+' · ':'')+navn+(v.str?' · str. '+v.str:'')+' · '+v.sku)+'">'+
     (v.img?'<img src="'+esc(IMG(v.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="26" height="32">':'<i class="intet"></i>')+
+    (v.maerke?'<i class="mk">'+esc(v.maerke)+'</i>':'')+
     '<span>'+esc(navn)+(v.str?' <b>'+esc(v.str)+'</b>':'')+(v.q>1?' · '+nf(v.q)+' stk':'')+'</span></span>';
 }
 
@@ -898,14 +931,99 @@ function visKoe(){
     (grupper || '<div class="empty">'+(KOE.length?'Ingen ordrer matcher.':'Ingen åbne ordrer.')+'</div>');
 }
 
+// ---------------------------------------------------------------- Helsinge: overblik til lageret
+const H = D.helsinge || {ordrer:[], varer:[]};
+const SALG = D.salg || {dage:0, daekket:0};
+const helStk = H.ordrer.reduce((a,o)=>a+o.stk,0);
+const kritisk = liste => liste.filter(o=>dageSiden(o.t)>=7).length;
+
+function hvare(v, ekstra, varm){
+  const navn = [v.navn, v.farve].filter(Boolean).join(' · ');
+  return '<div class="hvare'+(varm?' varm':'')+'" title="'+esc(navn+(v.str?' · str. '+v.str:'')+' · '+(v.sku||''))+'">'+
+    (v.img?'<img src="'+esc(IMG(v.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="38" height="48">':'<span class="intet"></span>')+
+    '<span class="txt"><b>'+esc(navn)+'</b>'+[v.str?'Str. '+esc(v.str):'', v.maerke?esc(v.maerke):''].filter(Boolean).join(' · ')+'</span>'+
+    '<span class="antal">'+ekstra+'</span></div>';
+}
+
+function ordreChip(o, tekst){
+  return '<span class="hels-ordre"><span class="nr">'+ordA(o)+'</span>'+koeAlder(o.t)+(tekst?'<span>'+tekst+'</span>':'')+'</span>';
+}
+
+// Varer, der kun ligger i Helsinge og sælger – de bør stå i Ramløse i stedet.
+function borFlyttes(antal){
+  const har = SALG.daekket > 0;
+  const kandidater = KH.filter(g => (g.solgt||0) > 0 || g.ord_stk > 0)
+    .sort((a,b)=> (b.solgt||0)-(a.solgt||0) || b.ord_stk-a.ord_stk || b.stk-a.stk);
+  return {har, liste: kandidater.slice(0, antal), i_alt: kandidater.length};
+}
+
+function borFlyttesKort(g){
+  const t = [];
+  if ((g.solgt||0) > 0) t.push('<b>'+nf(g.solgt)+'</b> solgt');
+  if (g.ord_stk > 0) t.push('<b>'+nf(g.ord_stk)+'</b> i ordrer');
+  const v = {navn:g.navn, farve:g.farve, str:'', sku:(g.varianter[0]||{}).sku, img:g.img};
+  return hvare(v, '<span style="font-size:12px">'+t.join('<br>')+'</span><small>'+nf(g.stk)+' stk i Helsinge</small>', (g.solgt||0) > 0);
+}
+
+function visHelsinge(){
+  const helKrit = kritisk(H.ordrer), flytKrit = kritisk(F.ordrer);
+  const bf = borFlyttes(8);
+  const tal = (n, tekst, krit) => '<div class="hels-tal'+(krit?' kritisk':'')+'"><b class="num">'+n+'</b><span>'+tekst+'</span></div>';
+
+  const p1 = '<section class="hels-panel"><h2><small>1 · Pak her</small>Ordrer, der kan pakkes færdige i Helsinge</h2>'+
+    '<div class="hels-top">'+
+      tal(nf(H.ordrer.length), 'ordrer') +
+      tal(nf(helStk), 'stk skal plukkes') +
+      tal(nf(H.varer.length), 'forskellige varer') +
+      tal(helKrit ? nf(helKrit) : '0', 'ordrer er over 7 dage', helKrit>0) +
+      (H.ordrer.length ? tal(dageSiden(H.ordrer[0].t)+' d', 'har den ældste ventet', dageSiden(H.ordrer[0].t)>=7) : '') +
+    '</div>'+
+    (H.varer.length ? '<p class="hels-und">Mest plukkede varer</p><div class="hvarer">'+
+        H.varer.slice(0,8).map(v=>hvare(v, nf(v.stk)+' stk<small>'+(v.ordrer===1?'1 ordre':v.ordrer+' ordrer')+'</small>')).join('')+'</div>' : '')+
+    (H.ordrer.length ? '<p class="hels-und" style="margin-top:12px">Ordrer – ældste først</p><div class="hels-ordrer">'+
+        H.ordrer.slice(0,40).map(o=>ordreChip(o, nf(o.stk)+' stk')).join('')+
+        (H.ordrer.length>40?'<span class="hels-ordre">+'+(H.ordrer.length-40)+' flere</span>':'')+'</div>'
+      : '<div class="empty">Ingen ordrer kan pakkes færdige i Helsinge lige nu.</div>')+
+    '</section>';
+
+  const p2 = '<section class="hels-panel b2"><h2><small>2 · Send til Ramløse</small>Varer, der skal flyttes, før ordren kan pakkes samlet</h2>'+
+    '<div class="hels-top">'+
+      tal(nf(flytStk), 'stk skal flyttes') +
+      tal(nf(F.varer.length), 'forskellige varer') +
+      tal(nf(F.ordrer.length), 'ordrer venter på dem') +
+      tal(flytKrit ? nf(flytKrit) : '0', 'ordrer er over 7 dage', flytKrit>0) +
+      (F.ordrer.length ? tal(dageSiden(F.ordrer[0].t)+' d', 'har den ældste ventet', dageSiden(F.ordrer[0].t)>=7) : '') +
+    '</div>'+
+    (F.varer.length ? '<p class="hels-und">Flest stk først</p><div class="hvarer">'+
+        F.varer.slice(0,8).map(v=>hvare(v, nf(v.stk)+' stk<small>'+(v.hylder[0]?esc(v.hylder[0][0].replace(/^Hall /,'')):'')+'</small>')).join('')+'</div>'+
+        '<div class="knaprad" style="margin-top:12px"><button type="button" class="filter-knap" data-tab-goto="flyt">Se hele flyttelisten →</button></div>'
+      : '<div class="empty">Ingenting skal flyttes lige nu.</div>')+
+    '</section>';
+
+  const p3 = '<section class="hels-panel b3"><h2><small>3 · Står kun her</small>Varer, der kun findes i Helsinge</h2>'+
+    '<div class="hels-top">'+
+      tal(nf(khVar), 'varianter') +
+      tal(nf(khStk), 'stk') +
+      tal(nf(KH.length), 'produkter') +
+      tal(nf(khOrd.length), 'produkter er i åbne ordrer') +
+    '</div>'+
+    (bf.liste.length ? '<p class="hels-und">Bør flyttes til Ramløse – sælger '+(bf.har?'de sidste '+SALG.dage+' dage':'lige nu')+'</p>'+
+        '<div class="hvarer bred">'+bf.liste.map(borFlyttesKort).join('')+'</div>'+
+        '<div class="knaprad" style="margin-top:12px"><button type="button" class="filter-knap" data-tab-goto="kunhel">Se alle varer, der kun er i Helsinge →</button></div>'
+      : '<div class="empty">Ingen af varerne i Helsinge sælger lige nu.</div>')+
+    '</section>';
+
+  return '<p class="hint">Overblik til lageret i Helsinge: hvad der kan pakkes her, hvad der skal sendes til Ramløse, og hvad der kun står her. Ordrer, der er over 7 dage gamle, er markeret med rødt.</p>'+p1+p2+p3;
+}
+
 function render(){
   $('#stats').innerHTML = statsHtml();
   document.querySelectorAll('nav.tabs button').forEach(b=>{
     const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, koe:koeVenter, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
+    const c = {prio:D.po.length, koe:koeVenter, hels:H.ordrer.length+F.ordrer.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
     b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
   });
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
