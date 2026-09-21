@@ -841,8 +841,7 @@ function visKunHel(){
   };
   const bf = borFlyttes(6);
   const top = bf.liste.length ? '<div class="hels-panel b3" style="border-left-color:var(--accent)">'+
-      '<p class="hels-und" style="margin:0 0 8px">Bør flyttes til Ramløse – '+(bf.har?'sælger mest de sidste '+SALG.dage+' dage':'flest i åbne ordrer')+
-      (bf.har&&SALG.daekket<SALG.dage?' (salgstal dækker indtil videre '+SALG.daekket+' dage)':'')+'</p>'+
+      '<p class="hels-und" style="margin:0 0 8px">Bør flyttes til Ramløse – '+salgTekst()+'</p>'+
       '<div class="hvarer bred">'+bf.liste.map(borFlyttesKort).join('')+'</div></div>' : '';
   return sum+top+'<p class="hint">Varer, der ligger i Helsinge (Hel-1, Hel-2 …), men hverken på Lager Ramløse eller i butikken. Én linje pr. produkt og farve; tallet ved hver størrelse er antal i Helsinge (flere farver af samme størrelse er lagt sammen), og størrelser med lilla kant er i åbne ordrer. Flest stk øverst. Karantæne og returkasser tæller ikke som lager.</p>'+
     '<div class="knaprad"><button type="button" class="filter-knap" id="kh-filter" aria-pressed="'+khKunOrdrer+'">Kun produkter i åbne ordrer ('+nf(khOrd.length)+')</button>'+lokKnap()+'</div>'+
@@ -949,6 +948,12 @@ function ordreChip(o, tekst){
   return '<span class="hels-ordre"><span class="nr">'+ordA(o)+'</span>'+koeAlder(o.t)+(tekst?'<span>'+tekst+'</span>':'')+'</span>';
 }
 
+// Salgstallene tælles op lidt ad gangen, så de første dage dækker de kun en del af vinduet.
+function salgTekst(){
+  if (!(SALG.daekket > 0)) return 'flest i åbne ordrer lige nu (salgstal er på vej)';
+  return 'mest solgte de sidste '+(SALG.daekket < SALG.dage ? SALG.daekket : SALG.dage)+' dage';
+}
+
 // Varer, der kun ligger i Helsinge og sælger – de bør stå i Ramløse i stedet.
 function borFlyttes(antal){
   const har = SALG.daekket > 0;
@@ -961,7 +966,7 @@ function borFlyttesKort(g){
   const t = [];
   if ((g.solgt||0) > 0) t.push('<b>'+nf(g.solgt)+'</b> solgt');
   if (g.ord_stk > 0) t.push('<b>'+nf(g.ord_stk)+'</b> i ordrer');
-  const v = {navn:g.navn, farve:g.farve, str:'', sku:(g.varianter[0]||{}).sku, img:g.img};
+  const v = {navn:g.navn, farve:g.farve, str:'', maerke:g.maerke, sku:(g.varianter[0]||{}).sku, img:g.img};
   return hvare(v, '<span style="font-size:12px">'+t.join('<br>')+'</span><small>'+nf(g.stk)+' stk i Helsinge</small>', (g.solgt||0) > 0);
 }
 
@@ -1007,7 +1012,7 @@ function visHelsinge(){
       tal(nf(KH.length), 'produkter') +
       tal(nf(khOrd.length), 'produkter er i åbne ordrer') +
     '</div>'+
-    (bf.liste.length ? '<p class="hels-und">Bør flyttes til Ramløse – sælger '+(bf.har?'de sidste '+SALG.dage+' dage':'lige nu')+'</p>'+
+    (bf.liste.length ? '<p class="hels-und">Bør flyttes til Ramløse – '+salgTekst()+'</p>'+
         '<div class="hvarer bred">'+bf.liste.map(borFlyttesKort).join('')+'</div>'+
         '<div class="knaprad" style="margin-top:12px"><button type="button" class="filter-knap" data-tab-goto="kunhel">Se alle varer, der kun er i Helsinge →</button></div>'
       : '<div class="empty">Ingen af varerne i Helsinge sælger lige nu.</div>')+
