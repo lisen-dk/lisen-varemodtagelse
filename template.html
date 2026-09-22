@@ -1256,13 +1256,53 @@ function visPopulaere(){
       : '<div class="empty">'+((BL.populaere||[]).length?'Ingen varer matcher.':'Ingen varer mangler i butikken lige nu.')+'</div>');
 }
 
+// Genopfyldning: solgt i butikken, men ikke på hylden længere
+const GF = D.genopfyld || {varer:[], dage:7};
+let gfKun = true;   // som udgangspunkt kun dem, der kan hentes på lagrene
+
+function visGenopfyld(){
+  const q = state.q;
+  const v = (GF.varer||[]).filter(g => (!gfKun || (g.kan_hentes>0)) &&
+    (!q || (g.navn+' '+g.farve+' '+g.maerke+' '+g.type).toLowerCase().includes(q)));
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(GF.udsolgt||0)+'</b><span>varer er solgt ud af butikken</span></div>'+
+    '<div><b class="num">'+nf(GF.udsolgt_kan||0)+'</b><span>af dem står klar på lagrene</span></div>'+
+    '<div><b class="num">'+nf(GF.stoerrelser_tomme||0)+'</b><span>tomme størrelser i alt</span></div>'+
+    '<div><b class="num">'+nf(GF.solgt||0)+'</b><span>stk solgt i butikken på '+(GF.dage||7)+' dage</span></div></div>';
+  const kort = g => {
+    const strl = g.varianter.map(x=>{
+      const tom = x.butik<=0 && x.solgt>0, kan = tom && x.lager>0;
+      const kl = kan ? ' class="i-ordre"' : '';
+      return '<span'+kl+' title="'+esc(nf(x.solgt)+' solgt · '+nf(x.butik)+' tilbage i butikken · '+nf(x.lager)+' på lagrene')+'">'+
+        esc(x.str)+' <b>'+nf(x.solgt)+'</b>'+(tom?' · tom':' · '+nf(x.butik)+' igen')+'</span>';
+    }).join('');
+    const meta = [g.maerke, g.type, g.pris?nf(g.pris)+' kr':'',
+      g.butik>0 ? nf(g.butik)+' stk tilbage i butikken' : 'ikke mere i butikken',
+      (g.lager+g.hel)>0 ? nf(g.lager+g.hel)+' stk på lagrene' : 'heller ikke på lagrene',
+      g.web ? nf(g.web)+' solgt på webshoppen' : ''].filter(Boolean).map(t=>'<span>'+esc(t)+'</span>').join('');
+    return '<div class="flytvare">'+kortBillede(g.img)+
+      '<div><h3>'+esc(g.navn)+(g.farve?' <small>· '+esc(g.farve)+'</small>':'')+'</h3>'+
+      '<div class="meta">'+meta+'</div>'+
+      '<div class="strl">'+strl+'</div></div>'+
+      '<div class="flytantal"><b class="num">'+nf(g.solgt)+'</b><span>solgt på '+(GF.dage||7)+' dage</span></div></div>';
+  };
+  return sum+
+    '<p class="hint">Varer, der er solgt i butikken de sidste '+(GF.dage||7)+' dage. Ved hver størrelse står, hvor mange der er solgt, og om der er noget tilbage på hylden – <b>tom</b> betyder udsolgt i butikken. Størrelser med lilla kant kan hentes på lagrene med det samme. Tomme hylder står øverst.</p>'+
+    '<div class="knaprad"><button type="button" class="filter-knap" id="gf-kun" aria-pressed="'+gfKun+'">Kun dem, der kan hentes på lagrene</button></div>'+
+    (v.length ? '<div class="flytliste">'+v.slice(0,120).map(kort).join('')+'</div>'+
+        (v.length>120?'<p class="hint" style="margin-top:10px">Viser de 120 første af '+nf(v.length)+' – søg for at finde resten.</p>':'')
+      : '<div class="empty">'+((GF.varer||[]).length
+            ? (gfKun && !q ? 'Ingen af de udsolgte varer findes på lagrene lige nu – slå filteret fra for at se dem alle.' : 'Ingen varer matcher.')
+            : 'Der er ikke solgt noget i butikken i perioden.')+'</div>');
+}
+
 // Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
 const KAT = [
   {k:'vare',  navn:'Varemodtagelse', url:'varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
   {k:'pluk',  navn:'Pluk & pak',     url:'pluk',           faner:['koe']},
   {k:'ret',   navn:'Retur',          url:'retur',          faner:['retur']},
   {k:'hel',   navn:'Helsinge',       url:'helsinge',       faner:['hels','flyt','kunhel']},
-  {k:'but',   navn:'Butik',          url:'butik',          faner:['butik','butlager','butpop']},
+  {k:'but',   navn:'Butik',          url:'butik',          faner:['butik','butlager','butpop','genopfyld']},
 ];
 const BASE = '__BASE__', START = '__START__';
 if (START && KAT.some(k=>k.faner.includes(START))) state.tab = START;
@@ -1271,7 +1311,7 @@ function saetAdresse(k){
 }
 const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
   uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
-  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu'};
+  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu', genopfyld:'Genopfyldning'};
 let sidsteFane = {};
 try { sidsteFane = JSON.parse(localStorage.getItem('lv_faner') || '{}') || {}; } catch(_){}
 const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
@@ -1279,7 +1319,7 @@ function faneTal(t){
   return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
     koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
     hels:H.ordrer.filter(o=>o.kun).length, flyt:F.ordrer.length, kunhel:khVar,
-    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter, butpop:(BL.populaere||[]).length}[t];
+    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter, butpop:(BL.populaere||[]).length, genopfyld:(GF.udsolgt_kan||0)}[t];
 }
 function katTal(k){
   return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
@@ -1313,7 +1353,7 @@ function render(){
     return '<button role="tab" id="tab-'+t+'" data-tab="'+t+'" aria-selected="'+(t===state.tab)+'">'+
       esc(FANENAVN[t])+(c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
   }).join('');
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager, butpop:visPopulaere}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager, butpop:visPopulaere, genopfyld:visGenopfyld}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
@@ -1329,6 +1369,7 @@ document.addEventListener('click', e=>{
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
   if (e.target.closest('#hel-kun')){ helKun = !helKun; render(); return; }
   if (e.target.closest('#bl-kun')){ blKun = !blKun; render(); return; }
+  if (e.target.closest('#gf-kun')){ gfKun = !gfKun; render(); return; }
   if (e.target.closest('#flyt-mere')){ flytAlle = true; render(); return; }
   const fs = e.target.closest('[data-flyt-sort]');
   if (fs){ flytSort = fs.dataset.flytSort; render(); return; }

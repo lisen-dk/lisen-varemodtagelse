@@ -800,6 +800,101 @@ def vare_type(produktnavn, kategorier=None):
     return ""
 
 
+# Butikssalg: SmartPacks POS-ordrer (orderType 4) er det, der er solgt i butikken.
+BUTIK_SALG_DAGE = int(os.environ.get("BUTIK_SALG_DAGE") or 7)
+BUTIK_SALG_SIDER = int(os.environ.get("BUTIK_SALG_SIDER") or 3)
+
+
+def hent_butikssalg():
+    """sku -> solgte stk i butikken de sidste BUTIK_SALG_DAGE dage."""
+    if TEST_DIR:
+        sti = os.path.join(TEST_DIR, "butikssalg.json")
+        return json.load(open(sti)) if os.path.exists(sti) else {}
+    graense = (datetime.now(timezone.utc) - timedelta(days=BUTIK_SALG_DAGE)).strftime("%Y-%m-%d")
+    solgt, ordrer, sider = collections.Counter(), 0, 0
+    sti = "/order/list/?orderType=4&pageSize=300&p=1"
+    while sti and sider < BUTIK_SALG_SIDER:
+        d = sp_get(sti)
+        raekker = d.get("data") or []
+        sider += 1
+        slut = False
+        for o in raekker:
+            if (o.get("orderDate") or "")[:10] < graense:
+                slut = True
+                continue
+            if o.get("isReturn"):
+                continue
+            ordrer += 1
+            for it in o.get("items") or []:
+                if it.get("type") != 0:
+                    continue
+                sku = (it.get("sku") or "").strip()
+                antal = tal(it.get("qty"))
+                if sku and antal > 0:
+                    solgt[sku] += antal
+        if slut:
+            break
+        nxt = d.get("nextPage") or ""
+        sti = nxt.split("/api/v1", 1)[1] if "/api/v1" in nxt else nxt
+    log(f"Butikssalg: {sum(solgt.values())} stk i {ordrer} butiksordrer de sidste {BUTIK_SALG_DAGE} dage "
+        f"({len(solgt)} varenumre, {sider} sider)")
+    return dict(solgt)
+
+
+def beregn_genopfyld(lager, detaljer, butikssalg, salg=None):
+    """Varer, der er solgt i butikken og ikke står på hylden længere."""
+    salg = salg or {}
+    grupper = {}
+    for sku, solgt in (butikssalg or {}).items():
+        if solgt <= 0:
+            continue
+        stk, _ = placeringer(lager.get(sku) or [])
+        v = detaljer.get(sku) or {}
+        navn, farve = navn_farve(v.get("productName") or sku)
+        maerke = v.get("manufacturerName") or ""
+        farve = sku_farve(sku) or farve
+        n = f"{maerke}|{sku_stamme(sku)}|{farve}"
+        g = grupper.setdefault(n, {
+            "navn": navn, "farve": farve, "maerke": maerke,
+            "type": type_navn(vare_type(v.get("productName"), v.get("categoryNames"))),
+            "img": vare_billede(sku, v.get("imageUrl")),
+            "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0),
+            "solgt": 0, "butik": 0, "lager": 0, "hel": 0, "web": 0, "varianter": [],
+        })
+        g["img"] = g["img"] or vare_billede(sku, v.get("imageUrl"))
+        g["maerke"] = g["maerke"] or maerke
+        g["solgt"] += tal(solgt)
+        g["butik"] += tal(stk["butik"])
+        g["lager"] += tal(stk["lager"])
+        g["hel"] += tal(stk["helsinge"])
+        g["web"] += tal(salg.get(sku))
+        g["varianter"].append({"sku": sku, "str": str_navn(v.get("variantName")), "solgt": tal(solgt),
+                               "butik": tal(stk["butik"]), "lager": tal(stk["lager"]) + tal(stk["helsinge"])})
+    ud = []
+    for g in grupper.values():
+        pr = {}
+        for x in g["varianter"]:
+            e = pr.setdefault(x["str"], {"str": x["str"], "solgt": 0, "butik": 0, "lager": 0})
+            e["solgt"] += x["solgt"]
+            e["butik"] += x["butik"]
+            e["lager"] += x["lager"]
+        g["varianter"] = sorted(pr.values(), key=lambda x: str_noegle(x["str"]))
+        g["tomme"] = sum(1 for x in g["varianter"] if x["butik"] <= 0 and x["solgt"] > 0)
+        g["kan_hentes"] = sum(1 for x in g["varianter"] if x["butik"] <= 0 and x["solgt"] > 0 and x["lager"] > 0)
+        ud.append(g)
+    # tomme hylder først, derefter mest solgte
+    ud.sort(key=lambda g: (-(1 if g["butik"] <= 0 else 0), -g["kan_hentes"], -g["solgt"]))
+    return {
+        "dage": BUTIK_SALG_DAGE,
+        "solgt": tal(sum(g["solgt"] for g in ud)),
+        "varer": ud[:200],
+        "udsolgt": sum(1 for g in ud if g["butik"] <= 0),
+        "udsolgt_kan": sum(1 for g in ud if g["butik"] <= 0 and (g["lager"] + g["hel"]) > 0),
+        "stoerrelser_tomme": sum(g["tomme"] for g in ud),
+        "stoerrelser_kan": sum(g["kan_hentes"] for g in ud),
+    }
+
+
 def sku_stamme(sku):
     """"25388-17 XS (96910 NAVY MELANGE) XS" -> "25388-17" – alt før første mellemrum."""
     return (sku or "").strip().split(" ")[0]
@@ -1355,10 +1450,11 @@ def main():
     kun_hel = {sku for sku, pl in lager.items()
                if (lambda st: st["helsinge"] > 0 and st["lager"] <= 0 and st["butik"] <= 0)(placeringer(pl)[0])}
     i_butik = {sku for sku, pl in lager.items() if placeringer(pl)[0]["butik"] > 0}
+    butikssalg = hent_butikssalg()
     salg = hent_salg()
     solgt = salg.get("solgt") or {}
     saelger = {sku for sku, antal in sorted(solgt.items(), key=lambda kv: -kv[1])[:600] if sku in lager and antal > 0}
-    alle_skus = skus | kun_hel | i_butik | saelger
+    alle_skus = skus | kun_hel | i_butik | saelger | set(butikssalg)
     varer = hent_varer(alle_skus)
     raw_ordrer = sp_til_noder(sp_ordrer, lager, varer)
     log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
@@ -1367,6 +1463,7 @@ def main():
     d = beregn(raw_po, raw_ordrer, lager, varer, salg)
     d["retur"] = beregn_retur(hent_retur(), retur_kasser)
     d["butikslager"] = beregn_butikslager(lager, varer, (salg or {}).get("solgt"))
+    d["genopfyld"] = beregn_genopfyld(lager, varer, butikssalg, (salg or {}).get("solgt"))
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
@@ -1383,6 +1480,9 @@ def main():
     log(f"Butikslager: {bl['stk']} stk · {bl['varianter']} varianter · {bl['produkter']} produkter · "
         f"{bl['kun_butik']} stk findes kun i butikken · {bl['maerker_i_alt']} mærker · "
         f"{len(bl['populaere'])} populære varer mangler i butikken")
+    gf = d["genopfyld"]
+    log(f"Genopfyldning: {gf['udsolgt']} varer er væk fra butikkens hylde "
+        f"({gf['udsolgt_kan']} kan hentes på lagrene) · {gf['stoerrelser_tomme']} tomme størrelser")
     r = d["retur"]
     log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
         f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")
