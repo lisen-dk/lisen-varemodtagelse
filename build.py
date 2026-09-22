@@ -134,6 +134,9 @@ def hent_sp_ordrer():
     return sp_sider(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize=300&p=1")
 
 
+LAGER_TEKST = {}
+
+
 def ddmmyyyy(s):
     """SmartPacks "24-08-2026 13:13:50" -> "2026-08-24". Tom streng, hvis datoen ikke kan læses."""
     d = (s or "")[:10].split("-")
@@ -152,6 +155,9 @@ def hent_lager():
     pl = collections.defaultdict(lambda: collections.defaultdict(float))
     kasser = {}
     for r in rows:
+        if r.get("description") and r.get("sku") not in LAGER_TEKST:
+            # "X-Small - Lora Pants | Blå | Bukser fra French Laundry"
+            LAGER_TEKST[r["sku"]] = (r["description"].split(" - ", 1)[-1] or "").strip()
         if (r.get("location") or "normal") != "normal":
             continue
         navn = r.get("placementName") or ""
@@ -851,9 +857,13 @@ def beregn_analyse(lager, detaljer, butikssalg, salg=None, salg_dage=0):
 
     def nogler(sku):
         v = detaljer.get(sku) or {}
-        m = v.get("manufacturerName") or "(uden mærke)"
-        t = type_navn(vare_type(v.get("productName"), v.get("categoryNames"))) or "(ukendt type)"
-        return m, t, float(v.get("salePrice") or v.get("normalPrice") or 0), float(v.get("cost") or 0)
+        navn = v.get("productName") or LAGER_TEKST.get(sku) or ""
+        m = v.get("manufacturerName") or ""
+        if not m and " fra " in navn:
+            m = navn.rsplit(" fra ", 1)[-1].strip()
+        t = type_navn(vare_type(navn, v.get("categoryNames")))
+        return (m or "(uden mærke)"), (t or "(ukendt type)"), \
+            float(v.get("salePrice") or v.get("normalPrice") or 0), float(v.get("cost") or 0)
 
     for sku, pl in lager.items():
         stk, _ = placeringer(pl)
@@ -885,7 +895,8 @@ def beregn_analyse(lager, detaljer, butikssalg, salg=None, salg_dage=0):
         return sorted(ud, key=lambda x: -x["stk"])
 
     mangler = sorted(({"navn": navn, "web": tal(v["web"])} for navn, v in maerker.items()
-                      if v["stk"] <= 0 and v["solgt"] <= 0 and v["web"] > 0),
+                      if v["stk"] <= 0 and v["solgt"] <= 0 and v["web"] > 0
+                      and navn not in ("(uden mærke)", "(ukendt type)")),
                      key=lambda x: -x["web"])[:10]
     m_liste, t_liste = liste(maerker), liste(typer)
     return {
