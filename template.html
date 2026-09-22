@@ -1198,17 +1198,42 @@ function visButikslager(){
       : '<div class="empty">'+((BL.varer||[]).length?'Ingen varer matcher.':'Der står ikke noget i butikken.')+'</div>');
 }
 
+// Populært på webshoppen, men ikke i butikken
+function visPopulaere(){
+  const q = state.q;
+  const P = (BL.populaere || []).filter(g => !q ||
+    (g.navn+' '+g.farve+' '+g.maerke+' '+g.type+' '+g.varianter.map(x=>x.sku+' '+x.str).join(' ')).toLowerCase().includes(q));
+  const dage = SALG.daekket ? Math.min(SALG.daekket, SALG.dage) : SALG.dage;
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(P.length)+'</b><span>populære varer mangler i butikken</span></div>'+
+    '<div><b class="num">'+nf(P.reduce((a,g)=>a+g.solgt,0))+'</b><span>stk solgt på webshoppen på '+dage+' dage</span></div>'+
+    '<div><b class="num">'+nf(P.reduce((a,g)=>a+g.lager+g.hel,0))+'</b><span>stk står klar på lagrene</span></div></div>';
+  const kort = g => {
+    const strl = g.varianter.map(x=>'<span title="'+esc((x.solgt||0)+' solgt · '+x.lager+' på Lager Ramløse · '+x.hel+' i Helsinge')+'">'+
+      esc(x.str)+' <b>'+nf(x.lager+x.hel)+'</b></span>').join('');
+    const meta = [g.maerke, g.type, g.pris?nf(g.pris)+' kr':''].filter(Boolean).map(t=>'<span>'+esc(t)+'</span>').join('');
+    return '<div class="flytvare">'+kortBillede(g.img)+
+      '<div><h3>'+esc(g.navn)+(g.farve?' <small>· '+esc(g.farve)+'</small>':'')+'</h3>'+
+      '<div class="meta">'+meta+'<span>'+nf(g.lager)+' stk på Lager Ramløse'+(g.hel?' · '+nf(g.hel)+' i Helsinge':'')+'</span></div>'+
+      '<div class="strl">'+strl+'</div></div>'+
+      '<div class="flytantal"><b class="num">'+nf(g.solgt)+'</b><span>solgt på '+dage+' dage</span></div></div>';
+  };
+  return sum+'<p class="hint">Varer, der sælger på webshoppen lige nu, men ikke står i butikken – og som kan hentes på lagrene. Tallet til højre er solgte stk de sidste '+dage+' dage'+(SALG.daekket&&SALG.daekket<SALG.dage?' (salgstallene dækker indtil videre '+SALG.daekket+' af '+SALG.dage+' dage)':'')+'. Tallet ved hver størrelse er, hvor mange der er på lagrene.</p>'+
+    (P.length ? '<div class="flytliste">'+P.map(kort).join('')+'</div>'
+      : '<div class="empty">'+((BL.populaere||[]).length?'Ingen varer matcher.':'Ingen varer mangler i butikken lige nu.')+'</div>');
+}
+
 // Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
 const KAT = [
   {k:'vare',  navn:'Varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
   {k:'pluk',  navn:'Pluk & pak',     faner:['koe']},
   {k:'ret',   navn:'Retur',          faner:['retur']},
   {k:'hel',   navn:'Helsinge',       faner:['hels','flyt','kunhel']},
-  {k:'but',   navn:'Butik',          faner:['butik','butlager']},
+  {k:'but',   navn:'Butik',          faner:['butik','butlager','butpop']},
 ];
 const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
   uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
-  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager'};
+  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu'};
 let sidsteFane = {};
 try { sidsteFane = JSON.parse(localStorage.getItem('lv_faner') || '{}') || {}; } catch(_){}
 const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
@@ -1216,7 +1241,7 @@ function faneTal(t){
   return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
     koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
     hels:H.ordrer.filter(o=>o.kun).length, flyt:F.ordrer.length, kunhel:khVar,
-    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter}[t];
+    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter, butpop:(BL.populaere||[]).length}[t];
 }
 function katTal(k){
   return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
@@ -1242,7 +1267,7 @@ function render(){
     return '<button role="tab" id="tab-'+t+'" data-tab="'+t+'" aria-selected="'+(t===state.tab)+'">'+
       esc(FANENAVN[t])+(c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
   }).join('');
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager, butpop:visPopulaere}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{

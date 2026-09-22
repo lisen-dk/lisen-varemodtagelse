@@ -36,6 +36,7 @@ import collections
 import gzip
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -472,7 +473,7 @@ def sp_til_noder(sp_ordrer, lager, varer):
             leveret = it.get("_StateDescription") == "Delivered"
             rest = 0 if leveret else max(0, qty - tal(it.get("shippedQty")))
             produkt = v.get("productName") or it.get("description") or sku
-            str_ = v.get("variantName") or ""
+            str_ = str_navn(v.get("variantName"))
             linjer.append({
                 "sku": sku, "name": produkt + (" - " + str_ if str_ else ""),
                 "currentQuantity": qty, "unfulfilledQuantity": rest,
@@ -560,6 +561,74 @@ def str_noegle(s):
         return (2, 0, s)
 
 
+# Størrelser skrives forskelligt fra leverandør til leverandør ("XS" og "X-Small",
+# "One Size" og "Onesize", "85" og "85 cm", "S / Længde 30" og "30"). Her samles de,
+# så et produkt kun står med hver størrelse én gang.
+STR_KORT = {"XXXS": "XXX-Small", "XXS": "XX-Small", "XS": "X-Small", "S": "Small", "M": "Medium",
+            "L": "Large", "XL": "X-Large", "XXL": "XX-Large", "XXXL": "XXX-Large",
+            "2XL": "XX-Large", "3XL": "XXX-Large"}
+ONESIZE = "Onesize"
+
+
+def tal_navn(x):
+    """"30,0" og "30.0" -> "30"."""
+    try:
+        f = float(str(x).replace(",", "."))
+    except ValueError:
+        return str(x)
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def str_navn(s):
+    """Ensartet navn på en størrelse."""
+    t = " ".join(str(s or "").split()).strip(" -")
+    if not t or t.lower() in ("(uden str.)", "uden str.", "no size", "n/a"):
+        return ONESIZE
+    lav = t.lower()
+    lav = re.sub(r"^(str\.?|størrelse|size)\s+", "", lav)
+    t = t[len(t) - len(lav):] if lav != t.lower() else t
+    if lav.replace("-", " ").replace("  ", " ") in ("one size", "onesize", "os", "onze size"):
+        return ONESIZE
+    if re.fullmatch(r"[\d.,]+\s*ml\b.*", lav) or re.search(r"\d\s*ml\b", lav):
+        return ONESIZE           # neglelak o.l. måles i ml – ikke en størrelse
+    # "S / Længde 30" og "W28 / Længde 30" -> 30
+    m = re.search(r"l[æa]ngde\s*([\d.,]+)", lav)
+    if m:
+        return tal_navn(m.group(1))
+    # "85 cm" -> 85
+    m = re.fullmatch(r"([\d.,]+)\s*(cm|centimeter)?", lav)
+    if m:
+        return tal_navn(m.group(1))
+    # XS/S, S/M, XL/XXL … og de lange navne
+    dele = [d.strip() for d in re.split(r"\s*/\s*", t) if d.strip()]
+    ud = []
+    for d in dele:
+        stor = d.upper().replace("-", "").replace(" ", "")
+        for lang, kort in LANGE_STR:
+            if stor == lang.replace("-", ""):
+                stor = kort
+        ud.append(STR_KORT.get(stor, d))
+    return "/".join(ud)
+
+
+# Varetyper står i produktnavnet og staves både i ental og flertal.
+TYPE_NAVN = {"bluser": "Bluse", "toppe": "Top", "tops": "Top", "t-shirts": "T-shirt", "t-shirt": "T-shirt",
+             "tshirt": "T-shirt", "kjoler": "Kjole", "jakker": "Jakke", "skjorter": "Skjorte",
+             "nederdele": "Nederdel", "veste": "Vest", "vests": "Vest", "buks": "Bukser", "bukser": "Bukser",
+             "strik": "Strik", "strikvarer": "Strik", "jeans": "Jeans", "shorts": "Shorts",
+             "sko": "Sko", "tasker": "Taske", "tørklæder": "Tørklæde", "smykker": "Smykke",
+             "bælter": "Bælte", "huer": "Hue", "handsker": "Handske", "sokker": "Sokker",
+             "strømpebukser": "Strømpebukser", "frakker": "Frakke", "cardigans": "Cardigan",
+             "blazere": "Blazer", "jumpsuits": "Jumpsuit", "sæt": "Sæt"}
+
+
+def type_navn(t):
+    t = " ".join(str(t or "").split())
+    if not t:
+        return ""
+    return TYPE_NAVN.get(t.lower(), t[0].upper() + t[1:])
+
+
 def beregn_kun_helsinge(lager, varer, klass, salg=None):
     """Produkter med varianter, der KUN ligger i Helsinge (intet på Lager Ramløse eller i butikken)."""
     efterspurgt = collections.defaultdict(lambda: {"stk": 0, "ordrer": {}})
@@ -585,7 +654,7 @@ def beregn_kun_helsinge(lager, varer, klass, salg=None):
         g["stk"] += stk["helsinge"]
         g["ord_stk"] += e["stk"]
         g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
-        g["varianter"].append({"sku": sku, "str": v.get("variantName") or "", "stk": tal(stk["helsinge"]),
+        g["varianter"].append({"sku": sku, "str": str_navn(v.get("variantName")), "stk": tal(stk["helsinge"]),
                                "res": tal(v.get("reservedCombined")), "ord": tal(e["stk"]),
                                "solgt": tal((salg or {}).get(sku))})
         for h, a in hylder["helsinge"]:
@@ -632,9 +701,9 @@ def beregn_butikslager(lager, detaljer, salg=None):
         v = detaljer.get(sku) or {}
         antal = tal(stk["butik"])
         navn, farve = navn_farve(v.get("productName") or sku)
-        type_ = vare_type(v.get("productName"), v.get("categoryNames"))
+        type_ = type_navn(vare_type(v.get("productName"), v.get("categoryNames")))
         maerke = v.get("manufacturerName") or ""
-        str_ = v.get("variantName") or ""
+        str_ = str_navn(v.get("variantName"))
         andre = stk["lager"] + stk["helsinge"]
         varianter += 1
         i_alt += antal
@@ -642,7 +711,7 @@ def beregn_butikslager(lager, detaljer, salg=None):
             kun_butik_stk += antal
         maerker[maerke or "(uden mærke)"] += antal
         typer[type_ or "(ukendt type)"] += antal
-        stroer[str_ or "(uden str.)"] += antal
+        stroer[str_] += antal
         kost += antal * float(v.get("cost") or 0)
         salgsvaerdi += antal * float(v.get("salePrice") or v.get("normalPrice") or 0)
         n = f"{navn} | {farve}"
@@ -666,6 +735,35 @@ def beregn_butikslager(lager, detaljer, salg=None):
         g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
         ud.append(g)
     ud.sort(key=lambda g: (-g["stk"], g["navn"].lower()))
+
+    # Varer, der sælger på webshoppen, men ikke står i butikken – og som kan hentes på lagrene
+    mangler = {}
+    for sku, solgt in (salg or {}).items():
+        if solgt <= 0 or sku not in lager:
+            continue
+        stk, _ = placeringer(lager[sku])
+        paa_lager = stk["lager"] + stk["helsinge"]
+        if stk["butik"] > 0 or paa_lager <= 0:
+            continue
+        v = detaljer.get(sku) or {}
+        navn, farve = navn_farve(v.get("productName") or sku)
+        n = f"{navn} | {farve}"
+        g = mangler.setdefault(n, {
+            "navn": navn, "farve": farve, "maerke": v.get("manufacturerName") or "",
+            "type": type_navn(vare_type(v.get("productName"), v.get("categoryNames"))),
+            "img": lille_billede(v.get("imageUrl")), "solgt": 0, "lager": 0, "hel": 0,
+            "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0), "varianter": [],
+        })
+        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["maerke"] = g["maerke"] or (v.get("manufacturerName") or "")
+        g["solgt"] += tal(solgt)
+        g["lager"] += tal(stk["lager"])
+        g["hel"] += tal(stk["helsinge"])
+        g["varianter"].append({"sku": sku, "str": str_navn(v.get("variantName")),
+                               "solgt": tal(solgt), "lager": tal(stk["lager"]), "hel": tal(stk["helsinge"])})
+    for g in mangler.values():
+        g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
+    populaere = sorted(mangler.values(), key=lambda g: (-g["solgt"], -g["lager"]))[:40]
     return {
         "stk": tal(i_alt), "varianter": varianter, "produkter": len(ud),
         "kun_butik": tal(kun_butik_stk),
@@ -676,6 +774,7 @@ def beregn_butikslager(lager, detaljer, salg=None):
         "stroer": [[x, tal(a)] for x, a in sorted(stroer.items(), key=lambda kv: str_noegle(kv[0]))],
         "varer": ud[:400],
         "flere": max(0, len(ud) - 400),
+        "populaere": populaere,
     }
 
 
@@ -753,7 +852,7 @@ def beregn_flyt(klass, detaljer=None):
             e = varer.setdefault(vid, {
                 "vid": vid, "sku": l["sku"], "navn": navn, "farve": farve,
                 "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
-                "str": titel, "img": ((li.get("image") or {}).get("url")) or "",
+                "str": str_navn(titel), "img": ((li.get("image") or {}).get("url")) or "",
                 "stk": 0, "hel_stk": l["hel"], "hylder": sorted(l["hylder"], key=lambda h: -h[1])[:6],
                 "ordrer": [], "aeldst": o["createdAt"],
             })
@@ -770,7 +869,7 @@ def vare_info(l, detaljer=None):
     titel = v.get("title") or ""
     grund = navn_str[: -len(" - " + titel)] if titel and navn_str.endswith(" - " + titel) else navn_str
     navn, farve = navn_farve(grund)
-    return {"vid": l["vid"], "sku": l["sku"], "navn": navn, "farve": farve, "str": titel,
+    return {"vid": l["vid"], "sku": l["sku"], "navn": navn, "farve": farve, "str": str_navn(titel),
             "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
             "img": ((li.get("image") or {}).get("url")) or ""}
 
@@ -919,7 +1018,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None, salg=None):
                 "qty": tal(l.get("qty")), "lev": tal(l.get("deliveredQty")),
                 "under": tal(l.get("beingDeliveredQty")), "mangler": tal(l.get("undeliveredQty")),
                 "ps": bool(l.get("preSell")), "navn": navn, "farve": farve,
-                "str": it.get("variantName") or "", "maerke": it.get("manufacturerName") or "",
+                "str": str_navn(it.get("variantName")), "maerke": it.get("manufacturerName") or "",
                 "pris": float(l.get("unitPrice") or l.get("price") or 0),
             })
         pos.append({
@@ -954,7 +1053,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None, salg=None):
     def vare_navn(sku):
         v = detaljer.get(sku) or {}
         navn, farve = navn_farve(v.get("productName") or sku)
-        return navn, farve, v.get("variantName") or ""
+        return navn, farve, str_navn(v.get("variantName"))
     ps_paa_po = collections.Counter()
     for p in pos:
         for l in p["linjer"]:
@@ -1113,13 +1212,15 @@ def main():
     kun_hel = {sku for sku, pl in lager.items()
                if (lambda st: st["helsinge"] > 0 and st["lager"] <= 0 and st["butik"] <= 0)(placeringer(pl)[0])}
     i_butik = {sku for sku, pl in lager.items() if placeringer(pl)[0]["butik"] > 0}
-    alle_skus = skus | kun_hel | i_butik
+    salg = hent_salg()
+    solgt = salg.get("solgt") or {}
+    saelger = {sku for sku, antal in sorted(solgt.items(), key=lambda kv: -kv[1])[:600] if sku in lager and antal > 0}
+    alle_skus = skus | kun_hel | i_butik | saelger
     varer = hent_varer(alle_skus)
     raw_ordrer = sp_til_noder(sp_ordrer, lager, varer)
     log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
         f"{len(alle_skus & set(varer))} af {len(alle_skus)} varer med detaljer")
 
-    salg = hent_salg()
     d = beregn(raw_po, raw_ordrer, lager, varer, salg)
     d["retur"] = beregn_retur(hent_retur(), retur_kasser)
     d["butikslager"] = beregn_butikslager(lager, varer, (salg or {}).get("solgt"))
@@ -1137,7 +1238,8 @@ def main():
         f"{len(hh)} kan pakkes der ({len(d['helsinge']['varer'])} varianter)")
     bl = d["butikslager"]
     log(f"Butikslager: {bl['stk']} stk · {bl['varianter']} varianter · {bl['produkter']} produkter · "
-        f"{bl['kun_butik']} stk findes kun i butikken · {bl['maerker_i_alt']} mærker")
+        f"{bl['kun_butik']} stk findes kun i butikken · {bl['maerker_i_alt']} mærker · "
+        f"{len(bl['populaere'])} populære varer mangler i butikken")
     r = d["retur"]
     log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
         f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")
