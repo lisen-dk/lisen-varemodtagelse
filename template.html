@@ -1209,16 +1209,16 @@ function visPopulaere(){
     '<div><b class="num">'+nf(P.reduce((a,g)=>a+g.solgt,0))+'</b><span>stk solgt på webshoppen på '+dage+' dage</span></div>'+
     '<div><b class="num">'+nf(P.reduce((a,g)=>a+g.lager+g.hel,0))+'</b><span>stk står klar på lagrene</span></div></div>';
   const kort = g => {
-    const strl = g.varianter.map(x=>'<span title="'+esc((x.solgt||0)+' solgt · '+x.lager+' på Lager Ramløse · '+x.hel+' i Helsinge')+'">'+
-      esc(x.str)+' <b>'+nf(x.lager+x.hel)+'</b></span>').join('');
+    const strl = g.varianter.map(x=>'<span title="'+esc(nf(x.solgt)+' solgt · '+nf(x.lager+x.hel)+' på lagrene')+'">'+
+      esc(x.str)+' <b>'+nf(x.solgt)+'</b></span>').join('');
     const meta = [g.maerke, g.type, g.pris?nf(g.pris)+' kr':''].filter(Boolean).map(t=>'<span>'+esc(t)+'</span>').join('');
     return '<div class="flytvare">'+kortBillede(g.img)+
       '<div><h3>'+esc(g.navn)+(g.farve?' <small>· '+esc(g.farve)+'</small>':'')+'</h3>'+
-      '<div class="meta">'+meta+'<span>'+nf(g.lager)+' stk på Lager Ramløse'+(g.hel?' · '+nf(g.hel)+' i Helsinge':'')+'</span></div>'+
+      '<div class="meta">'+meta+'</div>'+
       '<div class="strl">'+strl+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(g.solgt)+'</b><span>solgt på '+dage+' dage</span></div></div>';
   };
-  return sum+'<p class="hint">Varer, der sælger på webshoppen lige nu, men ikke står i butikken – og som kan hentes på lagrene. Tallet til højre er solgte stk de sidste '+dage+' dage'+(SALG.daekket&&SALG.daekket<SALG.dage?' (salgstallene dækker indtil videre '+SALG.daekket+' af '+SALG.dage+' dage)':'')+'. Tallet ved hver størrelse er, hvor mange der er på lagrene.</p>'+
+  return sum+'<p class="hint">Varer, der sælger på webshoppen lige nu, men ikke står i butikken – og som kan hentes på lagrene. Tallet til højre er solgte stk de sidste '+dage+' dage'+(SALG.daekket&&SALG.daekket<SALG.dage?' (salgstallene dækker indtil videre '+SALG.daekket+' af '+SALG.dage+' dage)':'')+'. Tallet ved hver størrelse er, hvor mange der er solgt af den størrelse. Én linje pr. farve.</p>'+
     (P.length ? '<div class="flytliste">'+P.map(kort).join('')+'</div>'
       : '<div class="empty">'+((BL.populaere||[]).length?'Ingen varer matcher.':'Ingen varer mangler i butikken lige nu.')+'</div>');
 }

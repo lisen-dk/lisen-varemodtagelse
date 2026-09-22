@@ -799,6 +799,20 @@ def vare_type(produktnavn, kategorier=None):
     return ""
 
 
+def sku_stamme(sku):
+    """"25388-17 XS (96910 NAVY MELANGE) XS" -> "25388-17" – alt før første mellemrum."""
+    return (sku or "").strip().split(" ")[0]
+
+
+def sku_farve(sku):
+    """Farven står i parentes i SKU'en: "(8694 HOT FUDGE)" -> "Hot Fudge"."""
+    m = re.search(r"\(([^)]*)\)", sku or "")
+    if not m:
+        return ""
+    t = re.sub(r"^\d+\s*[-–]?\s*", "", m.group(1)).strip()
+    return t.title() if t.isupper() else t
+
+
 def beregn_butikslager(lager, detaljer, salg=None):
     """Alt, der står i butikken i Ramløse – med mærker, varetyper og størrelser."""
     salg = salg or {}
@@ -858,9 +872,11 @@ def beregn_butikslager(lager, detaljer, salg=None):
             continue
         v = detaljer.get(sku) or {}
         navn, farve = navn_farve(v.get("productName") or sku)
-        n = f"{navn} | {farve}"
+        maerke = v.get("manufacturerName") or ""
+        farve = sku_farve(sku) or farve
+        n = f"{maerke}|{sku_stamme(sku)}|{farve}"
         g = mangler.setdefault(n, {
-            "navn": navn, "farve": farve, "maerke": v.get("manufacturerName") or "",
+            "navn": navn, "farve": farve, "maerke": maerke,
             "type": type_navn(vare_type(v.get("productName"), v.get("categoryNames"))),
             "img": vare_billede(sku, v.get("imageUrl")), "solgt": 0, "lager": 0, "hel": 0,
             "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0), "varianter": [],
@@ -873,7 +889,15 @@ def beregn_butikslager(lager, detaljer, salg=None):
         g["varianter"].append({"sku": sku, "str": str_navn(v.get("variantName")),
                                "solgt": tal(solgt), "lager": tal(stk["lager"]), "hel": tal(stk["helsinge"])})
     for g in mangler.values():
-        g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
+        # samme størrelse kan optræde i flere varenumre – læg salget sammen
+        pr = {}
+        for x in g["varianter"]:
+            e = pr.setdefault(x["str"], {"str": x["str"], "solgt": 0, "lager": 0, "hel": 0})
+            e["solgt"] += x["solgt"]
+            e["lager"] += x["lager"]
+            e["hel"] += x["hel"]
+        g["varianter"] = sorted((e for e in pr.values() if e["solgt"] > 0),
+                                key=lambda x: str_noegle(x["str"]))
     populaere = sorted(mangler.values(), key=lambda g: (-g["solgt"], -g["lager"]))[:40]
     return {
         "stk": tal(i_alt), "varianter": varianter, "produkter": len(ud),
