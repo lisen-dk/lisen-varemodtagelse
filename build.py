@@ -57,6 +57,7 @@ WORKER_URL = os.environ.get("WORKER_URL") or "https://lisen-varemodtagelse.lone-
 TEST_DIR = os.environ.get("TEST_DIR")
 HER = os.path.dirname(os.path.abspath(__file__))
 UD = os.path.join(HER, "site")
+SIDE_BASE = os.environ.get("SIDE_BASE") or "/lisen-varemodtagelse/"
 
 
 def log(*a):
@@ -1388,13 +1389,18 @@ def main():
     skabelon = open(os.path.join(HER, "template.html"), encoding="utf-8").read()
     side = skabelon.replace("__WORKER__", WORKER_URL).replace("__DATA__", json.dumps(blob))
     os.makedirs(UD, exist_ok=True)
-    with open(os.path.join(UD, "index.html"), "w", encoding="utf-8") as f:
-        f.write(side)
+    # Hvert område får sin egen adresse (…/butik/), så de kan starte direkte på deres eget overblik.
+    for mappe, fane in [("", ""), ("varemodtagelse", "prio"), ("pluk", "koe"), ("retur", "retur"),
+                        ("helsinge", "hels"), ("butik", "butik")]:
+        sti = os.path.join(UD, mappe) if mappe else UD
+        os.makedirs(sti, exist_ok=True)
+        with open(os.path.join(sti, "index.html"), "w", encoding="utf-8") as f:
+            f.write(side.replace("__BASE__", SIDE_BASE).replace("__START__", fane))
     with open(os.path.join(UD, "robots.txt"), "w") as f:
         f.write("User-agent: *\nDisallow: /\n")
     with open(os.path.join(UD, ".nojekyll"), "w") as f:
         f.write("")
-    log(f"Side skrevet: {len(side) // 1024} KB")
+    log(f"Side skrevet: {len(side) // 1024} KB · 6 adresser (rod + 5 områder)")
 
 
 if __name__ == "__main__":

@@ -378,16 +378,16 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
 </div>
 <div class="wrap" id="app" hidden>
   <header class="top">
-    <h1><small>Lisen.dk · lager &amp; kundeservice</small>Varemodtagelse</h1>
+    <h1><small>Lisen.dk · lager &amp; kundeservice</small><span id="omraadenavn">Varemodtagelse</span></h1>
     <div class="topknap"><div class="fresh" id="fresh"></div><button class="lille" id="logud" type="button">Log ud</button></div>
   </header>
+
+  <nav class="hoved" id="hovednav" aria-label="Områder"></nav>
 
   <section class="stats" id="stats" aria-label="Indkøbsordrer efter forventet levering"></section>
   <section class="presell-band" id="band" aria-label="Presell"></section>
   <button type="button" class="flyt-band" id="flytband" data-tab-goto="flyt" aria-label="Ordrer på flere lagre"></button>
   <button type="button" class="flyt-band butik-band" id="butikband" data-tab-goto="butik" aria-label="Hent i butikken"></button>
-
-  <nav class="hoved" id="hovednav" aria-label="Områder"></nav>
   <nav class="tabs" id="undernav" role="tablist"></nav>
 
   <div class="tools" id="tools">
@@ -1225,12 +1225,17 @@ function visPopulaere(){
 
 // Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
 const KAT = [
-  {k:'vare',  navn:'Varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
-  {k:'pluk',  navn:'Pluk & pak',     faner:['koe']},
-  {k:'ret',   navn:'Retur',          faner:['retur']},
-  {k:'hel',   navn:'Helsinge',       faner:['hels','flyt','kunhel']},
-  {k:'but',   navn:'Butik',          faner:['butik','butlager','butpop']},
+  {k:'vare',  navn:'Varemodtagelse', url:'varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
+  {k:'pluk',  navn:'Pluk & pak',     url:'pluk',           faner:['koe']},
+  {k:'ret',   navn:'Retur',          url:'retur',          faner:['retur']},
+  {k:'hel',   navn:'Helsinge',       url:'helsinge',       faner:['hels','flyt','kunhel']},
+  {k:'but',   navn:'Butik',          url:'butik',          faner:['butik','butlager','butpop']},
 ];
+const BASE = '__BASE__', START = '__START__';
+if (START && KAT.some(k=>k.faner.includes(START))) state.tab = START;
+function saetAdresse(k){
+  try { history.replaceState(null, '', BASE + k.url + '/'); } catch(_){}
+}
 const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
   uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
   flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu'};
@@ -1253,8 +1258,16 @@ function gemFane(){
 }
 
 function render(){
-  $('#stats').innerHTML = statsHtml();
   const nu = katFor(state.tab);
+  $('#omraadenavn').textContent = nu.navn;
+  document.title = nu.navn + ' · Lisen';
+  saetAdresse(nu);
+  // Hvert område har sine egne bånd øverst
+  $('#stats').hidden = nu.k !== 'vare';
+  $('#band').hidden = nu.k !== 'vare';
+  $('#flytband').hidden = nu.k !== 'hel';
+  $('#butikband').hidden = nu.k !== 'but';
+  if (nu.k === 'vare') $('#stats').innerHTML = statsHtml();
   $('#hovednav').innerHTML = KAT.map(k=>{
     const c = katTal(k.k);
     return '<button type="button" data-kat="'+k.k+'" aria-selected="'+(k.k===nu.k)+'">'+esc(k.navn)+
