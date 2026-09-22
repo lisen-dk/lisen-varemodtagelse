@@ -41,6 +41,9 @@ jobs:
           SMARTPACK_APP_ID: ${{ secrets.SMARTPACK_APP_ID }}
           SMARTPACK_TOKEN: ${{ secrets.SMARTPACK_TOKEN }}
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          # Kun til packshot-billederne (custom.packshot_url). Mangler de, springes det over.
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python3 build.py
 
       - name: Gem salgstal

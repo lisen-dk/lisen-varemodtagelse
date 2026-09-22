@@ -457,6 +457,117 @@ def lille_billede(url):
     return url or ""
 
 
+# ---------------------------------------------------------------- packshots fra Shopify
+
+# Produkterne i Shopify har metafeltet custom.packshot_url – et pænt pakkebillede på hvid bund.
+# Det bruges som miniature i stedet for SmartPacks billede, når varen har et. Listen hentes
+# højst én gang i døgnet og gemmes i state/packshot.json (GitHub-cache mellem kørsler).
+# Mangler Shopify-nøglerne, springes det bare over, og SmartPacks billeder bruges som før.
+SHOPIFY_SHOP = os.environ.get("SHOPIFY_SHOP") or "lisendk.myshopify.com"
+SHOPIFY_API = os.environ.get("SHOPIFY_API_VERSION") or "2026-07"
+PACKSHOT_FIL = os.path.join(HER, "state", "packshot.json")
+PACKSHOT_TIMER = int(os.environ.get("PACKSHOT_TIMER") or 24)
+PACKSHOT_SIDER = int(os.environ.get("PACKSHOT_SIDER") or 200)
+PACKSHOT = {}
+
+Q_PACKSHOT = """query V($after: String) {
+  productVariants(first: 250, after: $after) {
+    nodes { sku product { metafield(namespace: "custom", key: "packshot_url") { value } } }
+    pageInfo { hasNextPage endCursor } } }"""
+
+
+def shopify_token():
+    data = urllib.parse.urlencode({
+        "grant_type": "client_credentials",
+        "client_id": os.environ["SHOPIFY_CLIENT_ID"],
+        "client_secret": os.environ["SHOPIFY_CLIENT_SECRET"],
+    }).encode()
+    req = urllib.request.Request(f"https://{SHOPIFY_SHOP}/admin/oauth/access_token", data=data,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())["access_token"]
+
+
+def shopify_gql(token, query, variables=None, forsoeg=6):
+    url = f"https://{SHOPIFY_SHOP}/admin/api/{SHOPIFY_API}/graphql.json"
+    body = json.dumps({"query": query, "variables": variables or {}}).encode()
+    for n in range(forsoeg):
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Content-Type": "application/json", "X-Shopify-Access-Token": token})
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                svar = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 502, 503) and n < forsoeg - 1:
+                time.sleep(min(30, 2 ** n))
+                continue
+            raise
+        fejl = svar.get("errors") or []
+        if fejl and any((f.get("extensions") or {}).get("code") == "THROTTLED" for f in fejl):
+            time.sleep(min(30, 2 ** n))
+            continue
+        if fejl:
+            raise RuntimeError(json.dumps(fejl)[:300])
+        kvote = (((svar.get("extensions") or {}).get("cost") or {}).get("throttleStatus") or {})
+        if kvote.get("currentlyAvailable", 1000) < 300:
+            time.sleep(2)
+        return svar["data"]
+    raise RuntimeError("Shopify: for mange forsøg")
+
+
+def hent_packshots():
+    """sku -> packshot-adresse. Hentes højst én gang i døgnet."""
+    if TEST_DIR:
+        sti = os.path.join(TEST_DIR, "packshot.json")
+        return json.load(open(sti)) if os.path.exists(sti) else {}
+    gemt = {"hentet": "", "map": {}}
+    try:
+        gemt.update(json.load(open(PACKSHOT_FIL)))
+    except Exception:
+        pass
+    if not (os.environ.get("SHOPIFY_CLIENT_ID") and os.environ.get("SHOPIFY_CLIENT_SECRET")):
+        if gemt["map"]:
+            log(f"Packshots: bruger {len(gemt['map'])} gemte (Shopify-nøgler mangler)")
+        else:
+            log("Packshots: springes over – SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET mangler")
+        return gemt["map"]
+    frisk = False
+    try:
+        frisk = (datetime.now(timezone.utc) - datetime.strptime(gemt["hentet"], "%Y-%m-%dT%H:%M:%SZ")
+                 .replace(tzinfo=timezone.utc)) < timedelta(hours=PACKSHOT_TIMER)
+    except ValueError:
+        frisk = False
+    if frisk and gemt["map"]:
+        return gemt["map"]
+    try:
+        token = shopify_token()
+        ud, efter, sider = {}, None, 0
+        while sider < PACKSHOT_SIDER:
+            d = shopify_gql(token, Q_PACKSHOT, {"after": efter})
+            v = d["productVariants"]
+            sider += 1
+            for n in v["nodes"]:
+                url = ((n.get("product") or {}).get("metafield") or {}).get("value") or ""
+                sku = (n.get("sku") or "").strip()
+                if sku and url.startswith("http"):
+                    ud[sku] = url
+            if not v["pageInfo"]["hasNextPage"]:
+                break
+            efter = v["pageInfo"]["endCursor"]
+        gemt = {"hentet": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "map": ud}
+        os.makedirs(os.path.dirname(PACKSHOT_FIL), exist_ok=True)
+        json.dump(gemt, open(PACKSHOT_FIL, "w"), separators=(",", ":"))
+        log(f"Packshots: {len(ud)} varenumre hentet fra Shopify ({sider} sider)")
+    except Exception as e:
+        log(f"Packshots: kunne ikke hentes ({str(e)[:120]}) – bruger {len(gemt['map'])} gemte")
+    return gemt["map"]
+
+
+def vare_billede(sku, url=""):
+    """Packshot fra Shopify, hvis varen har et – ellers billedet fra SmartPack/ordren."""
+    return lille_billede(PACKSHOT.get((sku or "").strip()) or url)
+
+
 def sp_til_noder(sp_ordrer, lager, varer):
     """SmartPack-ordrer i det interne format, som klassificeringen bruger."""
     noder = []
@@ -647,13 +758,13 @@ def beregn_kun_helsinge(lager, varer, klass, salg=None):
         navn, farve = navn_farve(produkt)
         g = grupper.setdefault(produkt, {
             "navn": navn, "farve": farve, "maerke": v.get("manufacturerName") or "",
-            "img": lille_billede(v.get("imageUrl")), "stk": 0, "ord_stk": 0,
+            "img": vare_billede(sku, v.get("imageUrl")), "stk": 0, "ord_stk": 0,
             "varianter": [], "_hylder": collections.Counter(), "_ordrer": {},
         })
         e = efterspurgt.get(sku) or {"stk": 0, "ordrer": {}}
         g["stk"] += stk["helsinge"]
         g["ord_stk"] += e["stk"]
-        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["img"] = g["img"] or vare_billede(sku, v.get("imageUrl"))
         g["varianter"].append({"sku": sku, "str": str_navn(v.get("variantName")), "stk": tal(stk["helsinge"]),
                                "res": tal(v.get("reservedCombined")), "ord": tal(e["stk"]),
                                "solgt": tal((salg or {}).get(sku))})
@@ -717,10 +828,10 @@ def beregn_butikslager(lager, detaljer, salg=None):
         n = f"{navn} | {farve}"
         g = produkter.setdefault(n, {
             "navn": navn, "farve": farve, "maerke": maerke, "type": type_,
-            "img": lille_billede(v.get("imageUrl")), "stk": 0, "kun": 0, "solgt": 0,
+            "img": vare_billede(sku, v.get("imageUrl")), "stk": 0, "kun": 0, "solgt": 0,
             "varianter": [], "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0),
         })
-        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["img"] = g["img"] or vare_billede(sku, v.get("imageUrl"))
         g["maerke"] = g["maerke"] or maerke
         g["type"] = g["type"] or type_
         g["stk"] += antal
@@ -751,10 +862,10 @@ def beregn_butikslager(lager, detaljer, salg=None):
         g = mangler.setdefault(n, {
             "navn": navn, "farve": farve, "maerke": v.get("manufacturerName") or "",
             "type": type_navn(vare_type(v.get("productName"), v.get("categoryNames"))),
-            "img": lille_billede(v.get("imageUrl")), "solgt": 0, "lager": 0, "hel": 0,
+            "img": vare_billede(sku, v.get("imageUrl")), "solgt": 0, "lager": 0, "hel": 0,
             "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0), "varianter": [],
         })
-        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["img"] = g["img"] or vare_billede(sku, v.get("imageUrl"))
         g["maerke"] = g["maerke"] or (v.get("manufacturerName") or "")
         g["solgt"] += tal(solgt)
         g["lager"] += tal(stk["lager"])
@@ -852,7 +963,7 @@ def beregn_flyt(klass, detaljer=None):
             e = varer.setdefault(vid, {
                 "vid": vid, "sku": l["sku"], "navn": navn, "farve": farve,
                 "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
-                "str": str_navn(titel), "img": ((li.get("image") or {}).get("url")) or "",
+                "str": str_navn(titel), "img": vare_billede(l["sku"], ((li.get("image") or {}).get("url")) or ""),
                 "stk": 0, "hel_stk": l["hel"], "hylder": sorted(l["hylder"], key=lambda h: -h[1])[:6],
                 "ordrer": [], "aeldst": o["createdAt"],
             })
@@ -871,7 +982,7 @@ def vare_info(l, detaljer=None):
     navn, farve = navn_farve(grund)
     return {"vid": l["vid"], "sku": l["sku"], "navn": navn, "farve": farve, "str": str_navn(titel),
             "maerke": ((detaljer or {}).get(l["sku"]) or {}).get("manufacturerName") or "",
-            "img": ((li.get("image") or {}).get("url")) or ""}
+            "img": vare_billede(l["sku"], ((li.get("image") or {}).get("url")) or "")}
 
 
 def beregn_helsinge(klass, detaljer=None):
@@ -1048,7 +1159,7 @@ def beregn(raw_po, raw_ordrer, lager=None, detaljer=None, salg=None):
     detaljer = detaljer or {}
 
     def billede(sku):
-        return lille_billede((detaljer.get(sku) or {}).get("imageUrl"))
+        return vare_billede(sku, (detaljer.get(sku) or {}).get("imageUrl"))
 
     def vare_navn(sku):
         v = detaljer.get(sku) or {}
@@ -1203,6 +1314,8 @@ def main():
     if len(adgangskode) < 6:
         sys.exit("DASHBOARD_PASSWORD mangler eller er kortere end 6 tegn.")
 
+    global PACKSHOT
+    PACKSHOT = hent_packshots()
     raw_po = hent_po()
     log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer ({sum(1 for p in raw_po if p.get('state') == 1)} kladder)")
     sp_ordrer = hent_sp_ordrer()
