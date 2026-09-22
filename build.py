@@ -605,6 +605,80 @@ def beregn_kun_helsinge(lager, varer, klass, salg=None):
     return ud
 
 
+def vare_type(produktnavn, kategorier=None):
+    """"Navn | Farve | Kjole fra Mos Mosh" -> "Kjole". Ellers TYPE_-kategorien fra SmartPack."""
+    dele = [d.strip() for d in (produktnavn or "").split(" | ")]
+    for d in dele[1:]:
+        if " fra " in d:
+            t = d.split(" fra ")[0].strip()
+            if t:
+                return t
+    for k in kategorier or []:
+        if str(k).startswith("TYPE_"):
+            return str(k)[5:].replace("_", " ")
+    return ""
+
+
+def beregn_butikslager(lager, detaljer, salg=None):
+    """Alt, der står i butikken i Ramløse – med mærker, varetyper og størrelser."""
+    salg = salg or {}
+    produkter, varianter, i_alt, kun_butik_stk = {}, 0, 0, 0
+    maerker, typer, stroer = collections.Counter(), collections.Counter(), collections.Counter()
+    kost, salgsvaerdi = 0.0, 0.0
+    for sku, pl in lager.items():
+        stk, hylder = placeringer(pl)
+        if stk["butik"] <= 0:
+            continue
+        v = detaljer.get(sku) or {}
+        antal = tal(stk["butik"])
+        navn, farve = navn_farve(v.get("productName") or sku)
+        type_ = vare_type(v.get("productName"), v.get("categoryNames"))
+        maerke = v.get("manufacturerName") or ""
+        str_ = v.get("variantName") or ""
+        andre = stk["lager"] + stk["helsinge"]
+        varianter += 1
+        i_alt += antal
+        if andre <= 0:
+            kun_butik_stk += antal
+        maerker[maerke or "(uden mærke)"] += antal
+        typer[type_ or "(ukendt type)"] += antal
+        stroer[str_ or "(uden str.)"] += antal
+        kost += antal * float(v.get("cost") or 0)
+        salgsvaerdi += antal * float(v.get("salePrice") or v.get("normalPrice") or 0)
+        n = f"{navn} | {farve}"
+        g = produkter.setdefault(n, {
+            "navn": navn, "farve": farve, "maerke": maerke, "type": type_,
+            "img": lille_billede(v.get("imageUrl")), "stk": 0, "kun": 0, "solgt": 0,
+            "varianter": [], "pris": tal(v.get("salePrice") or v.get("normalPrice") or 0),
+        })
+        g["img"] = g["img"] or lille_billede(v.get("imageUrl"))
+        g["maerke"] = g["maerke"] or maerke
+        g["type"] = g["type"] or type_
+        g["stk"] += antal
+        if andre <= 0:
+            g["kun"] += antal
+        g["solgt"] += tal(salg.get(sku))
+        g["varianter"].append({"sku": sku, "str": str_, "stk": antal,
+                               "lager": tal(stk["lager"]), "hel": tal(stk["helsinge"]),
+                               "solgt": tal(salg.get(sku))})
+    ud = []
+    for g in produkter.values():
+        g["varianter"].sort(key=lambda x: str_noegle(x["str"]))
+        ud.append(g)
+    ud.sort(key=lambda g: (-g["stk"], g["navn"].lower()))
+    return {
+        "stk": tal(i_alt), "varianter": varianter, "produkter": len(ud),
+        "kun_butik": tal(kun_butik_stk),
+        "kost": round(kost), "vaerdi": round(salgsvaerdi),
+        "maerker": [[m, tal(a)] for m, a in maerker.most_common(14)],
+        "maerker_i_alt": len(maerker),
+        "typer": [[t, tal(a)] for t, a in typer.most_common(14)],
+        "stroer": [[x, tal(a)] for x, a in sorted(stroer.items(), key=lambda kv: str_noegle(kv[0]))],
+        "varer": ud[:400],
+        "flere": max(0, len(ud) - 400),
+    }
+
+
 def klassificer(o):
     """Samme logik som Mechanic-opgaven "Lagertags på ordrer" – men beregnet her, uafhængigt af tags.
 
@@ -1038,7 +1112,8 @@ def main():
     skus |= {(l.get("sku") or "").strip() for p in raw_po for l in (p.get("items") or [])}
     kun_hel = {sku for sku, pl in lager.items()
                if (lambda st: st["helsinge"] > 0 and st["lager"] <= 0 and st["butik"] <= 0)(placeringer(pl)[0])}
-    alle_skus = skus | kun_hel
+    i_butik = {sku for sku, pl in lager.items() if placeringer(pl)[0]["butik"] > 0}
+    alle_skus = skus | kun_hel | i_butik
     varer = hent_varer(alle_skus)
     raw_ordrer = sp_til_noder(sp_ordrer, lager, varer)
     log(f"SmartPack: {len(raw_ordrer)} åbne ordrer · {len(lager)} varer på lager · "
@@ -1047,6 +1122,7 @@ def main():
     salg = hent_salg()
     d = beregn(raw_po, raw_ordrer, lager, varer, salg)
     d["retur"] = beregn_retur(hent_retur(), retur_kasser)
+    d["butikslager"] = beregn_butikslager(lager, varer, (salg or {}).get("solgt"))
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
@@ -1059,6 +1135,9 @@ def main():
     hh = d["helsinge"]["ordrer"]
     log(f"Helsinge: {sum(1 for o in hh if o['kun'])} ordrer skal pakkes i Helsinge · "
         f"{len(hh)} kan pakkes der ({len(d['helsinge']['varer'])} varianter)")
+    bl = d["butikslager"]
+    log(f"Butikslager: {bl['stk']} stk · {bl['varianter']} varianter · {bl['produkter']} produkter · "
+        f"{bl['kun_butik']} stk findes kun i butikken · {bl['maerker_i_alt']} mærker")
     r = d["retur"]
     log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
         f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")

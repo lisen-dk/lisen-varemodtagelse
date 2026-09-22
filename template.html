@@ -308,6 +308,11 @@ td.thumb{width:48px;padding-right:0}
   .ret-sag .midt,.ret-sag .hoejre{grid-column:1/-1;justify-content:flex-start}
   .graf{height:140px;gap:3px}
 }
+.ford{display:grid;grid-template-columns:minmax(80px,max-content) minmax(0,1fr) auto;gap:5px 10px;align-items:center;font-size:12.5px;color:var(--ink2);margin:2px 0 0}
+.ford span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ford i{display:block;height:10px;border-radius:4px;background:var(--accent);min-width:2px}
+.ford b{font-variant-numeric:tabular-nums;font-weight:500;color:var(--ink)}
+.ford-kol{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px 26px;margin-top:6px}
 .koe-alder{font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--panel2);color:var(--ink2);white-space:nowrap}
 .koe-alder.mid{background:var(--tom-bg);color:var(--tom)}
 .koe-alder.kritisk{background:var(--late-bg);color:var(--late);font-weight:500}
@@ -1143,17 +1148,67 @@ function visRetur(){
     '</section>';
 }
 
+// ---------------------------------------------------------------- Butikkens lager
+const BL = D.butikslager || {varer:[], maerker:[], typer:[], stroer:[]};
+let blKun = false;
+
+function fordeling(titel, raekker, enhed){
+  if (!raekker || !raekker.length) return '';
+  const maks = Math.max(...raekker.map(r=>r[1]));
+  return '<div><p class="hels-und">'+esc(titel)+'</p><div class="ford">'+
+    raekker.map(r=>'<span title="'+esc(r[0])+'">'+esc(r[0])+'</span>'+
+      '<i style="width:'+Math.max(2,(r[1]/maks*100)).toFixed(1)+'%" aria-hidden="true"></i>'+
+      '<b>'+nf(r[1])+(enhed?' '+enhed:'')+'</b>').join('')+'</div></div>';
+}
+
+function visButikslager(){
+  const q = state.q;
+  const v = (BL.varer||[]).filter(g => (!blKun || g.kun>0) &&
+    (!q || (g.navn+' '+g.farve+' '+g.maerke+' '+g.type+' '+g.varianter.map(x=>x.sku+' '+x.str).join(' ')).toLowerCase().includes(q)));
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(BL.stk||0)+'</b><span>stk står i butikken i Ramløse</span></div>'+
+    '<div><b class="num">'+nf(BL.produkter||0)+'</b><span>produkter · '+nf(BL.varianter||0)+' størrelser</span></div>'+
+    '<div><b class="num">'+nf(BL.kun_butik||0)+'</b><span>stk findes kun her (intet på lagrene)</span></div>'+
+    '<div><b class="num">'+nf(BL.vaerdi||0)+' kr</b><span>i udsalgspris ('+nf(BL.kost||0)+' kr i kostpris)</span></div></div>';
+  const kort = g => {
+    const pr = new Map();
+    g.varianter.forEach(x=>{ const k=x.str||x.sku; const a=pr.get(k)||{str:k,stk:0,n:0}; a.stk+=x.stk; a.n++; pr.set(k,a); });
+    const strl = [...pr.values()].map(x=>'<span'+(x.n>1?' title="'+x.n+' varianter"':'')+'>'+esc(x.str)+' <b>'+nf(x.stk)+'</b></span>').join('');
+    const meta = [g.maerke, g.type, g.pris?nf(g.pris)+' kr':'', g.solgt?nf(g.solgt)+' solgt på '+(SALG.daekket||SALG.dage)+' dage':'']
+      .filter(Boolean).map(t=>'<span>'+esc(t)+'</span>').join('');
+    return '<div class="flytvare">'+kortBillede(g.img)+
+      '<div><h3>'+esc(g.navn)+(g.farve?' <small>· '+esc(g.farve)+'</small>':'')+'</h3>'+
+      '<div class="meta">'+meta+'</div>'+
+      '<div class="strl">'+strl+'</div>'+
+      (g.kun>0?'<div class="flytordrer">'+nf(g.kun)+' stk findes kun i butikken</div>':'')+'</div>'+
+      '<div class="flytantal"><b class="num">'+nf(g.stk)+'</b><span>stk i butikken</span></div></div>';
+  };
+  return sum+
+    '<section class="hels-panel b3"><h2><small>Fordeling</small>Hvad står der i butikken?</h2>'+
+      '<div class="ford-kol">'+
+        fordeling('Mærker'+(BL.maerker_i_alt>BL.maerker.length?' (de '+BL.maerker.length+' største af '+BL.maerker_i_alt+')':''), BL.maerker, 'stk')+
+        fordeling('Varetyper', BL.typer, 'stk')+
+        fordeling('Størrelser', BL.stroer, 'stk')+
+      '</div>'+
+    '</section>'+
+    '<div class="knaprad"><button type="button" class="filter-knap" id="bl-kun" aria-pressed="'+blKun+'">Kun varer, der ikke er på lagrene</button></div>'+
+    '<p class="hint">Alt, der ligger på butikkens placeringer i Ramløse. Størrelser er lagt sammen pr. produkt og farve, og "solgt" er webshop-salget i perioden. Flest stk øverst.</p>'+
+    (v.length ? '<div class="flytliste">'+v.slice(0,120).map(kort).join('')+'</div>'+
+        (v.length>120?'<p class="hint" style="margin-top:10px">Viser de 120 første af '+nf(v.length)+' produkter – søg for at finde resten.</p>':'')
+      : '<div class="empty">'+((BL.varer||[]).length?'Ingen varer matcher.':'Der står ikke noget i butikken.')+'</div>');
+}
+
 // Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
 const KAT = [
   {k:'vare',  navn:'Varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
   {k:'pluk',  navn:'Pluk & pak',     faner:['koe']},
   {k:'ret',   navn:'Retur',          faner:['retur']},
   {k:'hel',   navn:'Helsinge',       faner:['hels','flyt','kunhel']},
-  {k:'but',   navn:'Butik',          faner:['butik']},
+  {k:'but',   navn:'Butik',          faner:['butik','butlager']},
 ];
 const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
   uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
-  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent i butikken'};
+  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager'};
 let sidsteFane = {};
 try { sidsteFane = JSON.parse(localStorage.getItem('lv_faner') || '{}') || {}; } catch(_){}
 const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
@@ -1161,7 +1216,7 @@ function faneTal(t){
   return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
     koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
     hels:H.ordrer.filter(o=>o.kun).length, flyt:F.ordrer.length, kunhel:khVar,
-    butik:B.filter(x=>x.nu>0).length}[t];
+    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter}[t];
 }
 function katTal(k){
   return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
@@ -1187,7 +1242,7 @@ function render(){
     return '<button role="tab" id="tab-'+t+'" data-tab="'+t+'" aria-selected="'+(t===state.tab)+'">'+
       esc(FANENAVN[t])+(c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
   }).join('');
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
@@ -1202,6 +1257,7 @@ document.addEventListener('click', e=>{
   if (as){ const k = as.dataset.apSort; state.apSort = state.apSort.k===k ? {k, dir:-state.apSort.dir} : {k, dir: (k==='lev'||k==='dato'||k==='bestilt')?1:-1}; render(); return; }
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
   if (e.target.closest('#hel-kun')){ helKun = !helKun; render(); return; }
+  if (e.target.closest('#bl-kun')){ blKun = !blKun; render(); return; }
   if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
   if (e.target.closest('#ret-gl')){ returGl = !returGl; returAlle = false; render(); return; }
   if (e.target.closest('#ret-mere')){ returAlle = true; render(); return; }
