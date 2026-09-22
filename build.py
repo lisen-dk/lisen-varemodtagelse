@@ -702,25 +702,36 @@ def vare_info(l, detaljer=None):
 
 
 def beregn_helsinge(klass, detaljer=None):
-    """Ordrer, der kan pakkes færdige i Helsinge, og de varer, de indeholder."""
+    """Ordrer uden presell, hvor alle varer kan plukkes i Helsinge.
+
+    kun = 1: varerne kan ikke tages i Ramløse – ordren SKAL pakkes i Helsinge.
+    kun = 0: ordren kan pakkes begge steder (Ramløse har forrang i pluk-reglen).
+    """
     ordrer, varer = [], {}
     for o, k in klass:
-        if k["presell"] or k["pak"] != "PAK_Helsinge":
+        if k["presell"] or not k["lager"]:
             continue
+        if not all(l["hel"] > 0 for l in k["lager"]):
+            continue
+        kun = 0 if all(l["kan_r"] for l in k["lager"]) else 1
         oid = gid_id(o["id"])
-        ordrer.append({"id": oid, "n": o["name"], "t": o["createdAt"],
+        ordrer.append({"id": oid, "n": o["name"], "t": o["createdAt"], "kun": kun,
                        "stk": tal(sum(l["q"] for l in k["lager"])), "linjer": len(k["lager"])})
         for l in k["lager"]:
             e = varer.setdefault(l["vid"], dict(vare_info(l, detaljer), stk=0, ordrer=0,
+                                                stk_kun=0, ordrer_kun=0,
                                                 hel_stk=l["hel"],
                                                 hylder=sorted(l["hylder"], key=lambda h: -h[1])[:6],
                                                 aeldst=o["createdAt"]))
             e["stk"] += l["q"]
             e["ordrer"] += 1
+            if kun:
+                e["stk_kun"] += l["q"]
+                e["ordrer_kun"] += 1
             e["aeldst"] = min(e["aeldst"], o["createdAt"])
     ordrer.sort(key=lambda x: x["t"])
     for e in varer.values():
-        e["stk"] = tal(e["stk"])
+        e["stk"], e["stk_kun"] = tal(e["stk"]), tal(e["stk_kun"])
     return {"ordrer": ordrer, "varer": sorted(varer.values(), key=lambda x: (-x["stk"], x["aeldst"]))}
 
 
@@ -1045,8 +1056,9 @@ def main():
         f"({sum(g['stk'] for g in d['kun_hel'])} stk) i {len(d['kun_hel'])} produkter")
     log(f"Flere lagre: {len(d['flyt']['ordrer'])} ordrer · "
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
-    log(f"Helsinge: {len(d['helsinge']['ordrer'])} ordrer kan pakkes i Helsinge "
-        f"({len(d['helsinge']['varer'])} varianter)")
+    hh = d["helsinge"]["ordrer"]
+    log(f"Helsinge: {sum(1 for o in hh if o['kun'])} ordrer skal pakkes i Helsinge · "
+        f"{len(hh)} kan pakkes der ({len(d['helsinge']['varer'])} varianter)")
     r = d["retur"]
     log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
         f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")

@@ -267,6 +267,7 @@ td.thumb{width:48px;padding-right:0}
 .hels-tal{display:flex;flex-direction:column;min-width:96px}
 .hels-tal b{font-size:26px;font-weight:400;line-height:1.1;font-variant-numeric:tabular-nums}
 .hels-tal span{font-size:12.5px;color:var(--ink2)}
+.hels-tal span b{font-size:inherit;font-weight:600;color:var(--ink)}
 .hels-tal.kritisk b{color:var(--late)}
 .hels-und{font-size:13px;color:var(--ink2);margin:0 0 8px;font-weight:500}
 .hvarer{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:8px}
@@ -960,6 +961,7 @@ function visKoe(){
 const H = D.helsinge || {ordrer:[], varer:[]};
 const SALG = D.salg || {dage:0, daekket:0};
 const helStk = H.ordrer.reduce((a,o)=>a+o.stk,0);
+let helKun = true;   // vis som udgangspunkt kun dem, der SKAL pakkes i Helsinge
 const kritisk = liste => liste.filter(o=>dageSiden(o.t)>=7).length;
 
 function hvare(v, ekstra, varm){
@@ -997,23 +999,31 @@ function borFlyttesKort(g){
 }
 
 function visHelsinge(){
-  const helKrit = kritisk(H.ordrer), flytKrit = kritisk(F.ordrer);
+  const flytKrit = kritisk(F.ordrer);
   const bf = borFlyttes(8);
   const tal = (n, tekst, krit) => '<div class="hels-tal'+(krit?' kritisk':'')+'"><b class="num">'+n+'</b><span>'+tekst+'</span></div>';
 
+  const helSkal = H.ordrer.filter(o=>o.kun), helOgsaa = H.ordrer.filter(o=>!o.kun);
+  const helValgt = helKun ? helSkal : H.ordrer;
+  const helVarer = (helKun ? H.varer.filter(v=>v.stk_kun>0) : H.varer)
+    .map(v => helKun ? Object.assign({}, v, {stk:v.stk_kun, ordrer:v.ordrer_kun}) : v)
+    .sort((a,b)=>b.stk-a.stk);
+  const helKrit = kritisk(helValgt);
   const p1 = '<section class="hels-panel"><h2><small>1 · Pak her</small>Ordrer, der kan pakkes færdige i Helsinge</h2>'+
     '<div class="hels-top">'+
-      tal(nf(H.ordrer.length), 'ordrer') +
-      tal(nf(helStk), 'stk skal plukkes') +
-      tal(nf(H.varer.length), 'forskellige varer') +
+      tal(nf(helSkal.length), 'ordrer <b>skal</b> pakkes her', false) +
+      tal(nf(helOgsaa.length), 'kan også pakkes i Ramløse') +
+      tal(nf(helValgt.reduce((a,o)=>a+o.stk,0)), 'stk skal plukkes') +
       tal(helKrit ? nf(helKrit) : '0', 'ordrer er over 7 dage', helKrit>0) +
-      (H.ordrer.length ? tal(dageSiden(H.ordrer[0].t)+' d', 'har den ældste ventet', dageSiden(H.ordrer[0].t)>=7) : '') +
+      (helValgt.length ? tal(dageSiden(helValgt[0].t)+' d', 'har den ældste ventet', dageSiden(helValgt[0].t)>=7) : '') +
     '</div>'+
-    (H.varer.length ? '<p class="hels-und">Mest plukkede varer</p><div class="hvarer">'+
-        H.varer.slice(0,8).map(v=>hvare(v, nf(v.stk)+' stk<small>'+(v.ordrer===1?'1 ordre':v.ordrer+' ordrer')+'</small>')).join('')+'</div>' : '')+
-    (H.ordrer.length ? '<p class="hels-und" style="margin-top:12px">Ordrer – ældste først</p><div class="hels-ordrer">'+
-        H.ordrer.slice(0,40).map(o=>ordreChip(o, nf(o.stk)+' stk')).join('')+
-        (H.ordrer.length>40?'<span class="hels-ordre">+'+(H.ordrer.length-40)+' flere</span>':'')+'</div>'
+    '<p class="hint" style="margin:-4px 0 10px">Ordrer, der <b>skal</b> pakkes her, har mindst én vare, som ikke findes i Ramløse. Resten kan pakkes begge steder – i pluk-reglen har Ramløse forrang.</p>'+
+    '<div class="knaprad"><button type="button" class="filter-knap" id="hel-kun" aria-pressed="'+helKun+'">Kun dem, der skal pakkes her ('+nf(helSkal.length)+')</button></div>'+
+    (helVarer.length ? '<p class="hels-und">Mest plukkede varer</p><div class="hvarer">'+
+        helVarer.slice(0,8).map(v=>hvare(v, nf(v.stk)+' stk<small>'+(v.ordrer===1?'1 ordre':v.ordrer+' ordrer')+'</small>')).join('')+'</div>' : '')+
+    (helValgt.length ? '<p class="hels-und" style="margin-top:12px">Ordrer – ældste først</p><div class="hels-ordrer">'+
+        helValgt.slice(0,40).map(o=>ordreChip(o, nf(o.stk)+' stk'+(!helKun&&o.kun?' · skal her':''))).join('')+
+        (helValgt.length>40?'<span class="hels-ordre">+'+(helValgt.length-40)+' flere</span>':'')+'</div>'
       : '<div class="empty">Ingen ordrer kan pakkes færdige i Helsinge lige nu.</div>')+
     '</section>';
 
@@ -1150,12 +1160,12 @@ const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
 function faneTal(t){
   return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
     koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
-    hels:H.ordrer.length, flyt:F.ordrer.length, kunhel:khVar,
+    hels:H.ordrer.filter(o=>o.kun).length, flyt:F.ordrer.length, kunhel:khVar,
     butik:B.filter(x=>x.nu>0).length}[t];
 }
 function katTal(k){
   return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
-    hel:H.ordrer.length+F.ordrer.length, but:B.filter(x=>x.nu>0).length}[k];
+    hel:H.ordrer.filter(o=>o.kun).length+F.ordrer.length, but:B.filter(x=>x.nu>0).length}[k];
 }
 function gemFane(){
   sidsteFane[katFor(state.tab).k] = state.tab;
@@ -1191,6 +1201,7 @@ document.addEventListener('click', e=>{
   const as = e.target.closest('[data-ap-sort]');
   if (as){ const k = as.dataset.apSort; state.apSort = state.apSort.k===k ? {k, dir:-state.apSort.dir} : {k, dir: (k==='lev'||k==='dato'||k==='bestilt')?1:-1}; render(); return; }
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
+  if (e.target.closest('#hel-kun')){ helKun = !helKun; render(); return; }
   if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
   if (e.target.closest('#ret-gl')){ returGl = !returGl; returAlle = false; render(); return; }
   if (e.target.closest('#ret-mere')){ returAlle = true; render(); return; }
