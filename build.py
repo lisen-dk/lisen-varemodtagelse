@@ -977,6 +977,11 @@ def beregn_flyt(klass, detaljer=None):
         ordrer_ud.append({
             "id": oid, "n": o["name"], "t": o["createdAt"],
             "linjer": len(k["lager"]), "flyt": tal(sum(l["q"] for l in flyt)), "presell": venter,
+            # hvad der skal hentes i Helsinge til netop denne ordre
+            "varer": [dict(vare_info(l, detaljer), stk=tal(l["q"]),
+                           hylde=(sorted(l["hylder"], key=lambda h: -h[1])[:1] or [["", 0]])[0][0])
+                      for l in flyt[:6]],
+            "flere": max(0, len(flyt) - 6),
         })
         for l in flyt:
             li, v = l["li"], l["v"]

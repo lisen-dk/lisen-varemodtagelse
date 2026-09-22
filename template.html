@@ -789,9 +789,39 @@ $('#flytband').innerHTML =
   '<div><b class="num">'+nf(flytStk)+'</b><span>stk ('+nf(F.varer.length)+' varer) skal flyttes fra Helsinge</span></div>'+
   '<span class="gaa">Se flyttelisten →</span>';
 
+let flytSort = 'alder';   // 'alder' = ældste ordre først, 'stk' = flest stk først
+let flytAlle = false;
+
+function flytOrdreliste(){
+  const q = state.q;
+  const ordrer = F.ordrer.filter(o => !q ||
+    (o.n+' '+(o.varer||[]).map(v=>v.sku+' '+v.navn+' '+v.farve+' '+v.str+' '+(v.hylde||'')).join(' ')).toLowerCase().includes(q));
+  if (!ordrer.length) return '';
+  const vis = flytAlle ? ordrer : ordrer.slice(0,25);
+  const raekke = o => {
+    const varer = (o.varer||[]).map(v=>{
+      const navn = [v.navn, v.farve].filter(Boolean).join(' · ');
+      return '<span class="koe-vare" title="'+esc(navn+(v.str?' · str. '+v.str:'')+' · '+v.sku+(v.hylde?' · '+v.hylde:''))+'">'+
+        (v.img?'<img src="'+esc(IMG(v.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer" width="26" height="32">':'<i class="intet"></i>')+
+        (v.maerke?'<i class="mk">'+esc(v.maerke)+'</i>':'')+
+        '<span>'+esc(navn)+(v.str?' <b>'+esc(v.str)+'</b>':'')+(v.stk>1?' · '+nf(v.stk)+' stk':'')+
+        (v.hylde?' · '+esc(v.hylde.replace(/^Hall /,'')):'')+'</span></span>';
+    }).join('')+(o.flere?'<span class="koe-vare" style="padding-left:11px"><span>+'+o.flere+' mere</span></span>':'');
+    return '<div class="koe-ordre"><span class="nr">'+ordA(o)+'</span>'+koeAlder(o.t)+
+      '<span class="varer">'+varer+'</span>'+
+      '<span class="hoejre">'+nf(o.flyt)+' stk flyttes'+(o.presell?'<span class="smalltag">venter også på presell</span>':'')+'</span></div>';
+  };
+  return '<section class="hels-panel b2"><h2><small>Prioritet</small>Ordrer, der venter på flytning – ældste først</h2>'+
+    '<p class="hint" style="margin:8px 0 0">Hver linje er en ordre, der ikke kan pakkes, før varerne er hentet i Helsinge. Efter varen står hyldepladsen.</p>'+
+    vis.map(raekke).join('')+
+    (ordrer.length>vis.length?'<button type="button" class="koe-mere" id="flyt-mere">Vis alle '+nf(ordrer.length)+' ordrer →</button>':'')+
+    '</section>';
+}
+
 function visFlyt(){
   const q = state.q;
-  const v = F.varer.filter(x=>!q || (x.sku+' '+x.navn+' '+x.farve+' '+x.str+' '+x.hylder.map(h=>h[0]).join(' ')+' '+x.ordrer.map(o=>o.n).join(' ')).toLowerCase().includes(q));
+  const v = F.varer.filter(x=>!q || (x.sku+' '+x.navn+' '+x.farve+' '+x.str+' '+x.hylder.map(h=>h[0]).join(' ')+' '+x.ordrer.map(o=>o.n).join(' ')).toLowerCase().includes(q))
+    .slice().sort((a,b)=> flytSort==='alder' ? (a.aeldst<b.aeldst?-1:a.aeldst>b.aeldst?1:b.stk-a.stk) : (b.stk-a.stk));
   const sum = '<div class="flyt-sum">'+
     '<div class="hoved"><b class="num">'+nf(F.ordrer.length)+'</b><span>åbne ordrer ligger på både Ramløse og Helsinge</span></div>'+
     '<div><b class="num">'+nf(flytStk)+'</b><span>stk skal flyttes fra Helsinge til Ramløse</span></div>'+
@@ -806,8 +836,11 @@ function visFlyt(){
       '<div class="flytordrer">'+x.ordrer.length+(x.ordrer.length===1?' ordre: ':' ordrer: ')+ord+'</div></div>'+
       '<div class="flytantal"><b class="num">'+nf(x.stk)+'</b><span>stk flyttes</span></div></div>';
   };
-  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren kan hverken pakkes samlet på Lager Ramløse eller i Helsinge. Butikken bruges kun til varer, der ikke findes på nogen af de to lagre. Listen viser de varer, der skal hentes i Helsinge – flest stk øverst. Karantæne og returkasser tæller ikke som lager; returvarer på hylder og varer i andre kasser gør.</p>'+
-    '<div class="knaprad">'+lokKnap()+'</div>'+
+  return sum+'<p class="hint">Beregnet ud fra hyldeplaceringerne med samme regel som FlereLagre i Mechanic (uafhængigt af tags): ordren kan hverken pakkes samlet på Lager Ramløse eller i Helsinge. Butikken bruges kun til varer, der ikke findes på nogen af de to lagre. Nederst står de varer, der skal hentes i Helsinge – sorteret som du vælger. Karantæne og returkasser tæller ikke som lager; returvarer på hylder og varer i andre kasser gør.</p>'+
+    flytOrdreliste()+
+    '<p class="hels-und" style="margin-top:16px">Varer, der skal hentes i Helsinge</p>'+
+    '<div class="knaprad"><button type="button" class="filter-knap" data-flyt-sort="alder" aria-pressed="'+(flytSort==='alder')+'">Ældste ordre først</button>'+
+    '<button type="button" class="filter-knap" data-flyt-sort="stk" aria-pressed="'+(flytSort==='stk')+'">Flest stk først</button>'+lokKnap()+'</div>'+
     (v.length?'<div class="flytliste">'+v.map(kort).join('')+'</div>':'<div class="empty">'+(F.varer.length?'Ingen varer matcher søgningen.':'Ingen ordrer ligger på to lagre lige nu.')+'</div>');
 }
 
@@ -1296,6 +1329,9 @@ document.addEventListener('click', e=>{
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
   if (e.target.closest('#hel-kun')){ helKun = !helKun; render(); return; }
   if (e.target.closest('#bl-kun')){ blKun = !blKun; render(); return; }
+  if (e.target.closest('#flyt-mere')){ flytAlle = true; render(); return; }
+  const fs = e.target.closest('[data-flyt-sort]');
+  if (fs){ flytSort = fs.dataset.flytSort; render(); return; }
   if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
   if (e.target.closest('#ret-gl')){ returGl = !returGl; returAlle = false; render(); return; }
   if (e.target.closest('#ret-mere')){ returAlle = true; render(); return; }
