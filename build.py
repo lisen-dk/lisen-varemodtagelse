@@ -132,21 +132,40 @@ def hent_sp_ordrer():
     return sp_sider(f"/order/list/?state={SP_ORDRE_STATES}&orderType=1&pageSize=300&p=1")
 
 
-def hent_lager():
-    """sku -> [[hyldenavn, antal, flag]] fra SmartPacks lagerliste. Flag K = karantæne.
+def ddmmyyyy(s):
+    """SmartPacks "24-08-2026 13:13:50" -> "2026-08-24". Tom streng, hvis datoen ikke kan læses."""
+    d = (s or "")[:10].split("-")
+    return f"{d[2]}-{d[1]}-{d[0]}" if len(d) == 3 and len(d[2]) == 4 else ""
 
-    Returvarer, der er sat på en almindelig hylde, er almindeligt lager (SmartPack plukker dem)."""
+
+def hent_lager():
+    """(sku -> [[hyldenavn, antal, flag]], returkasser) fra SmartPacks lagerliste. Flag K = karantæne.
+
+    Returvarer, der er sat på en almindelig hylde, er almindeligt lager (SmartPack plukker dem).
+    Returkasserne (Tote Retur…) er det, der er kommet retur og endnu ikke er sat på plads."""
     if TEST_DIR:
         rows = json.load(open(os.path.join(TEST_DIR, "stock.json")))
     else:
         rows = sp_get("/stock/list").get("data") or []
     pl = collections.defaultdict(lambda: collections.defaultdict(float))
+    kasser = {}
     for r in rows:
         if (r.get("location") or "normal") != "normal":
             continue
+        navn = r.get("placementName") or ""
         flag = "K" if r.get("quarantine") else ""
-        pl[r.get("sku") or ""][(r.get("placementName") or "", flag)] += float(r.get("quantity") or 0)
-    return {sku: [[navn, tal(antal), flag] for (navn, flag), antal in d.items()] for sku, d in pl.items()}
+        pl[r.get("sku") or ""][(navn, flag)] += float(r.get("quantity") or 0)
+        if "retur" in navn.lower():
+            k = kasser.setdefault(navn, {"navn": navn, "stk": 0, "linjer": 0, "aeldst": ""})
+            k["stk"] += float(r.get("quantity") or 0)
+            k["linjer"] += 1
+            d = ddmmyyyy(r.get("arrivalDate"))
+            if d and (not k["aeldst"] or d < k["aeldst"]):
+                k["aeldst"] = d
+    for k in kasser.values():
+        k["stk"] = tal(k["stk"])
+    return ({sku: [[navn, tal(antal), flag] for (navn, flag), antal in d.items()] for sku, d in pl.items()},
+            sorted(kasser.values(), key=lambda k: (k["aeldst"] or "9", -k["stk"])))
 
 
 def hent_varer(skus):
@@ -168,6 +187,171 @@ def hent_varer(skus):
         if pakke:
             rows += hent(pakke)
     return {r.get("sku"): r for r in rows if r.get("sku")}
+
+
+# ---------------------------------------------------------------- returneringer
+
+# SmartPacks returpakker (/returnshipment/list): kunden opretter en retur og får en label,
+# og pakken bliver først "færdig", når lageret har behandlet den.
+#   state 1 = Ventende (oprettet, pakken er ikke modtaget)   3 = Færdig
+#   state 2 = Modtaget                                       4 = Aflyst
+# Listen kan ikke filtreres på dato eller status, så sagerne gemmes i state/retur.json
+# (GitHub-cache mellem kørsler): de nyeste sider hentes hver gang, og hele vinduet
+# gennemgås med mellemrum, fordi en sag skifter status uden at rykke op i listen.
+RETUR_STATE = {1: "ventende", 2: "modtaget", 3: "faerdig", 4: "aflyst"}
+RETUR_DAGE = int(os.environ.get("RETUR_DAGE") or 14)           # vindue for færdige sager
+RETUR_VENT_DAGE = int(os.environ.get("RETUR_VENT_DAGE") or 60)  # ventende sager beholdes længere
+RETUR_NYE_SIDER = int(os.environ.get("RETUR_NYE_SIDER") or 2)   # nyeste sider hver kørsel
+RETUR_BAGUD_SIDER = int(os.environ.get("RETUR_BAGUD_SIDER") or 1)  # sider længere nede pr. kørsel
+RETUR_TJEK = int(os.environ.get("RETUR_TJEK") or 60)            # ventende sager, der slås op enkeltvis
+RETUR_FIL = os.path.join(HER, "state", "retur.json")
+
+
+def retur_fragt(url):
+    u = (url or "").lower()
+    return "dao" if "dao" in u else "gls" if "gls" in u else ""
+
+
+def retur_sag(x):
+    """Kun det, siden skal bruge – ingen kundeoplysninger."""
+    pk = x.get("package") or {}
+    return {
+        "nr": x.get("shipmentNo"), "ordre": x.get("orderNo") or "", "oid": x.get("orderId"),
+        "st": tal(x.get("state")), "op": (x.get("createdAt") or "")[:19],
+        "fa": (x.get("finishedAt") or "")[:19],
+        "stk": tal(sum(float(l.get("quantity") or 0) for l in (x.get("lines") or []))),
+        "fragt": retur_fragt(pk.get("trackingUrl")), "tt": pk.get("trackingUrl") or "",
+    }
+
+
+def hent_retur():
+    """Returpakker. Gemmes i state/retur.json og holdes ajour lidt ad gangen.
+
+    Listen kan hverken filtreres på dato eller status, og en side langt nede tager
+    ca. 40 sekunder. Derfor:
+      - de nyeste sider hentes hver kørsel (nye sager)
+      - én side længere nede pr. kørsel, indtil vinduet er dækket
+      - ventende sager slås op enkeltvis (0,2 sek. pr. stk), for de skifter status,
+        uden at rykke op i listen – ældste og længst utjekkede først
+    """
+    if TEST_DIR:
+        sti = os.path.join(TEST_DIR, "returnshipments.json")
+        raa = json.load(open(sti)) if os.path.exists(sti) else []
+        return [retur_sag(x) for x in raa]
+    nu = datetime.now(timezone.utc)
+    graense = (nu - timedelta(days=RETUR_DAGE)).strftime("%Y-%m-%d")
+    vent_graense = (nu - timedelta(days=RETUR_VENT_DAGE)).strftime("%Y-%m-%d")
+    gemt = {"sager": {}, "bagud": 3, "faerdig": False}
+    try:
+        gemt.update(json.load(open(RETUR_FIL)))
+    except Exception:
+        pass
+    sager = gemt["sager"]
+    nye, sider = 0, 0
+
+    def laes(nr):
+        d = sp_get(f"/returnshipment/list?pageSize=300&p={nr}")
+        raekker = d.get("data") or []
+        aeldst = ""
+        for x in raekker:
+            sag = retur_sag(x)
+            sid = str(x.get("shipmentId"))
+            dag = sag["op"][:10]
+            if not aeldst or dag < aeldst:
+                aeldst = dag
+            if sid not in sager:
+                sager[sid] = sag
+                return_nye[0] += 1
+            else:
+                sager[sid].update(sag)
+            sager[sid]["tjek"] = nu.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return len(raekker), aeldst
+
+    return_nye = [0]
+    for nr in range(1, RETUR_NYE_SIDER + 1):
+        antal, _ = laes(nr)
+        sider += 1
+        if not antal:
+            break
+    if not gemt.get("faerdig"):
+        for _ in range(RETUR_BAGUD_SIDER):
+            nr = max(RETUR_NYE_SIDER + 1, tal(gemt.get("bagud")) or 3)
+            antal, aeldst = laes(nr)
+            sider += 1
+            gemt["bagud"] = nr + 1
+            if not antal or (aeldst and aeldst < graense):
+                gemt["faerdig"] = True
+                break
+    nye = return_nye[0]
+
+    # ventende sager: slå de ældste/længst utjekkede op enkeltvis
+    ventende = sorted((sid for sid, s in sager.items() if s.get("st") == 1),
+                      key=lambda sid: (sager[sid].get("tjek") or "", sager[sid].get("op") or ""))
+    tjekket, aendret = 0, 0
+    for sid in ventende[:RETUR_TJEK]:
+        d = sp_get(f"/returnshipment/get/{sid}")
+        x = d.get("data") if isinstance(d, dict) else None
+        tjekket += 1
+        if not x:
+            continue
+        sag = retur_sag(x)
+        if sag["st"] != sager[sid].get("st"):
+            aendret += 1
+        sager[sid].update(sag)
+        sager[sid]["tjek"] = nu.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    gemt["sager"] = {k: v for k, v in sager.items()
+                     if (v.get("op", "")[:10] >= graense
+                         or (v.get("st") == 1 and v.get("op", "")[:10] >= vent_graense))}
+    try:
+        os.makedirs(os.path.dirname(RETUR_FIL), exist_ok=True)
+        json.dump(gemt, open(RETUR_FIL, "w"), separators=(",", ":"))
+    except Exception as e:
+        log(f"Kunne ikke gemme returdata: {e}")
+    ud = list(gemt["sager"].values())
+    log(f"Returpakker: {len(ud)} sager · {sider} sider ({nye} nye) · "
+        f"{tjekket} ventende tjekket ({aendret} skiftede status)"
+        + ("" if gemt.get("faerdig") else f" · henter stadig bagud (side {gemt.get('bagud')})"))
+    return ud
+
+
+def beregn_retur(sager, kasser):
+    """Status, ventende sager efter alder, udvikling pr. dag og lagerets returkasser."""
+    idag = datetime.now(timezone.utc).date()
+    stat = collections.Counter(RETUR_STATE.get(s["st"], "andet") for s in sager)
+    ventende = sorted((s for s in sager if s["st"] == 1), key=lambda s: s["op"])
+    behandling = []
+    for s in sager:
+        if s["st"] == 3 and s["op"] and s["fa"]:
+            try:
+                a = datetime.fromisoformat(s["op"][:10])
+                b = datetime.fromisoformat(s["fa"][:10])
+                behandling.append((b - a).days)
+            except ValueError:
+                pass
+    behandling.sort()
+    # fast akse: de sidste 14 dage, også dem uden sager
+    dage = {(idag - timedelta(days=i)).isoformat(): {"op": 0, "fa": 0} for i in range(13, -1, -1)}
+    for s in sager:
+        if s["op"][:10] in dage:
+            dage[s["op"][:10]]["op"] += 1
+        if s["st"] == 3 and s["fa"][:10] in dage:
+            dage[s["fa"][:10]]["fa"] += 1
+    gammel = sum(1 for s in ventende if s["op"][:10] < (idag - timedelta(days=7)).isoformat())
+    return {
+        "dage_vindue": RETUR_DAGE,
+        "stat": {k: stat.get(k, 0) for k in ("ventende", "modtaget", "faerdig", "aflyst")},
+        "gamle": gammel,
+        "stk_ventende": tal(sum(s["stk"] for s in ventende)),
+        "median": behandling[len(behandling) // 2] if behandling else None,
+        "snit": round(sum(behandling) / len(behandling), 1) if behandling else None,
+        "behandlet": len(behandling),
+        "ventende": ventende[:400],
+        "flere_ventende": max(0, len(ventende) - 400),
+        "dage": [{"d": d, **v} for d, v in sorted(dage.items())],
+        "kasser": kasser,
+        "kasse_stk": tal(sum(k["stk"] for k in kasser)),
+    }
 
 
 # ---------------------------------------------------------------- salg de sidste dage
@@ -838,7 +1022,7 @@ def main():
     raw_po = hent_po()
     log(f"SmartPack: {len(raw_po)} åbne indkøbsordrer ({sum(1 for p in raw_po if p.get('state') == 1)} kladder)")
     sp_ordrer = hent_sp_ordrer()
-    lager = hent_lager()
+    lager, retur_kasser = hent_lager()
     skus = {(it.get("sku") or "").strip() for o in sp_ordrer for it in (o.get("items") or []) if it.get("type") == 0}
     skus |= {(l.get("sku") or "").strip() for p in raw_po for l in (p.get("items") or [])}
     kun_hel = {sku for sku, pl in lager.items()
@@ -851,6 +1035,7 @@ def main():
 
     salg = hent_salg()
     d = beregn(raw_po, raw_ordrer, lager, varer, salg)
+    d["retur"] = beregn_retur(hent_retur(), retur_kasser)
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
@@ -862,6 +1047,9 @@ def main():
         f"{len(d['flyt']['varer'])} varianter skal flyttes fra Helsinge")
     log(f"Helsinge: {len(d['helsinge']['ordrer'])} ordrer kan pakkes i Helsinge "
         f"({len(d['helsinge']['varer'])} varianter)")
+    r = d["retur"]
+    log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
+        f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")
     koe = collections.Counter(o["g"] for o in d["koe"])
     log("Ordrer i kø: " + " · ".join(f"{g} {koe.get(g, 0)}" for g in KOE_ORDEN))
 

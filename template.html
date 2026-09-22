@@ -19,6 +19,7 @@
   --late:#b4475f; --late-bg:#fbe8ec; --today:#3f7d63; --today-bg:#e4f2eb; --tom:#98691f; --tom-bg:#fbf0dc; --later-bg:#f4edf0;
   --shadow:0 1px 2px rgba(110,60,80,.04),0 6px 22px rgba(110,60,80,.06);
   --flyt:#8b64b9; --flyt-bg:#f3edf9; --butik:#4f8a70; --butik-bg:#e8f3ed;
+  --serie1:#8b64b9; --serie2:#98691f;
   --radius:14px; --radius-s:9px;
   --sans:"Jost",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace;
 }
@@ -29,6 +30,7 @@
   --late:#f0899f; --late-bg:#3c2229; --today:#8fd0b1; --today-bg:#1e3229; --tom:#efc27c; --tom-bg:#382c18; --later-bg:#2b2227;
   --shadow:0 1px 2px rgba(0,0,0,.25),0 6px 22px rgba(0,0,0,.2);
   --flyt:#c5a7ec; --flyt-bg:#2e2540; --butik:#8fd0b1; --butik-bg:#1e3229;
+  --serie1:#8f66c9; --serie2:#b8862e;
 }}
 :root[data-theme="dark"]{
   --bg:#1b1519; --panel:#241c21; --panel2:#2b2227; --ink:#f4e9ee; --ink2:#c8b5bd; --ink3:#95808a;
@@ -37,6 +39,7 @@
   --late:#f0899f; --late-bg:#3c2229; --today:#8fd0b1; --today-bg:#1e3229; --tom:#efc27c; --tom-bg:#382c18; --later-bg:#2b2227;
   --shadow:0 1px 2px rgba(0,0,0,.25),0 6px 22px rgba(0,0,0,.2);
   --flyt:#c5a7ec; --flyt-bg:#2e2540; --butik:#8fd0b1; --butik-bg:#1e3229;
+  --serie1:#8f66c9; --serie2:#b8862e;
 }
 *{box-sizing:border-box}
 html{color-scheme:light dark}
@@ -126,6 +129,13 @@ details.lok .hylder{margin-top:6px}
 .knaprad{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
 @media (max-width:560px){.flytvare{grid-template-columns:64px minmax(0,1fr);gap:12px}.flytvare img,.flytvare .noimg{width:64px;height:80px}.flytantal{grid-column:2;flex-direction:row;gap:8px;align-items:baseline}}
 
+nav.hoved{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+nav.hoved button{font:inherit;font-size:12.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:9px 17px;cursor:pointer;display:inline-flex;align-items:center;gap:9px;white-space:nowrap;box-shadow:var(--shadow);transition:border-color .15s,background .15s,color .15s}
+nav.hoved button:hover{border-color:var(--accent);color:var(--ink)}
+nav.hoved button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+nav.hoved button .c{font-family:var(--mono);font-size:11.5px;letter-spacing:0;opacity:.75}
+nav.tabs[hidden]{display:none}
+@media (max-width:640px){nav.hoved{gap:6px}nav.hoved button{padding:8px 13px;font-size:11.5px;letter-spacing:.1em}}
 nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
 nav.tabs button{font:inherit;font-weight:400;font-size:14.5px;background:none;border:0;padding:7px 14px;color:var(--ink2);cursor:pointer;border-radius:99px;white-space:nowrap;transition:background .15s,color .15s}
 nav.tabs button:hover{background:var(--panel2);color:var(--ink)}
@@ -271,6 +281,32 @@ td.thumb{width:48px;padding-right:0}
 .hels-ordrer{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .hels-ordre{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:2px 11px;font-size:12.5px;background:var(--panel)}
 .hels-ordre .nr{font-family:var(--mono);font-size:12.5px}
+.graf{display:flex;align-items:flex-end;gap:6px;height:170px;margin:6px 0 4px;padding:0 2px}
+.graf-dag{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;height:100%}
+.graf-soejler{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%}
+.graf-soejler i{display:block;width:44%;max-width:16px;min-height:2px;border-radius:4px 4px 0 0;background:var(--serie1)}
+.graf-soejler i.to{background:var(--serie2)}
+.graf-dag small{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.graf-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 18px;font-size:12.5px;color:var(--ink2)}
+.graf-tegn{display:inline-flex;align-items:center;gap:6px}
+.graf-tegn i{width:11px;height:11px;border-radius:3px;background:var(--serie1);display:block}
+.graf-tegn.to i{background:var(--serie2)}
+.ret-sag{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:9px 18px;border-top:1px solid var(--line2)}
+.ret-sag .nr{font-family:var(--mono);font-size:13px;white-space:nowrap}
+.ret-sag .koe-alder,.koe-ordre .koe-alder{justify-self:start}
+.ret-sag .midt{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:var(--ink2);min-width:0}
+.ret-sag .hoejre{display:flex;gap:8px;align-items:center;justify-content:flex-end;font-size:12.5px;white-space:nowrap}
+.fragt{font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--ink2);background:var(--panel2);border:1px solid var(--line2);border-radius:99px;padding:1px 8px}
+.kasser{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.kasse{background:var(--panel2);border:1px solid var(--line2);border-radius:var(--radius-s);padding:8px 12px;display:flex;flex-direction:column;gap:1px}
+.kasse b{font-size:15px;font-weight:500;font-variant-numeric:tabular-nums}
+.kasse span{font-size:12px;color:var(--ink3)}
+.kasse.gl{border-color:var(--late);background:var(--late-bg)}
+@media (max-width:760px){
+  .ret-sag{grid-template-columns:auto auto;padding:10px 14px}
+  .ret-sag .midt,.ret-sag .hoejre{grid-column:1/-1;justify-content:flex-start}
+  .graf{height:140px;gap:3px}
+}
 .koe-alder{font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--panel2);color:var(--ink2);white-space:nowrap}
 .koe-alder.mid{background:var(--tom-bg);color:var(--tom)}
 .koe-alder.kritisk{background:var(--late-bg);color:var(--late);font-weight:500}
@@ -345,18 +381,8 @@ footer{margin-top:32px;font-size:13px;color:var(--ink3);max-width:75ch}
   <button type="button" class="flyt-band" id="flytband" data-tab-goto="flyt" aria-label="Ordrer på flere lagre"></button>
   <button type="button" class="flyt-band butik-band" id="butikband" data-tab-goto="butik" aria-label="Hent i butikken"></button>
 
-  <nav class="tabs" role="tablist">
-    <button role="tab" id="tab-prio" aria-selected="true" data-tab="prio">Prioritet</button>
-    <button role="tab" id="tab-koe" aria-selected="false" data-tab="koe">Ordrer i kø</button>
-    <button role="tab" id="tab-hels" aria-selected="false" data-tab="hels">Helsinge</button>
-    <button role="tab" id="tab-allepo" aria-selected="false" data-tab="allepo">Alle PO'er</button>
-    <button role="tab" id="tab-dage" aria-selected="false" data-tab="dage">Ankomster</button>
-    <button role="tab" id="tab-varer" aria-selected="false" data-tab="varer">Presell-varer</button>
-    <button role="tab" id="tab-uden" aria-selected="false" data-tab="uden">Presell uden PO</button>
-    <button role="tab" id="tab-flyt" aria-selected="false" data-tab="flyt">Flyt fra Helsinge</button>
-    <button role="tab" id="tab-butik" aria-selected="false" data-tab="butik">Hent i butikken</button>
-    <button role="tab" id="tab-kunhel" aria-selected="false" data-tab="kunhel">Kun i Helsinge</button>
-  </nav>
+  <nav class="hoved" id="hovednav" aria-label="Områder"></nav>
+  <nav class="tabs" id="undernav" role="tablist"></nav>
 
   <div class="tools" id="tools">
     <input type="search" id="q" placeholder="Søg på PO-nummer, leverandør, varenavn, SKU eller ordrenummer" aria-label="Søg">
@@ -1021,14 +1047,137 @@ function visHelsinge(){
   return '<p class="hint">Overblik til lageret i Helsinge: hvad der kan pakkes her, hvad der skal sendes til Ramløse, og hvad der kun står her. Ordrer, der er over 7 dage gamle, er markeret med rødt.</p>'+p1+p2+p3;
 }
 
+// ---------------------------------------------------------------- Returneringer
+// Returpakker fra SmartPack: kunden opretter returen og får en label (Ventende),
+// og sagen bliver Færdig, når lageret har behandlet den. "I transit" kender SmartPack ikke
+// – derfor linkes der direkte til fragtfirmaets Track & Trace på hver ventende sag.
+const R = D.retur || {stat:{}, ventende:[], dage:[], kasser:[]};
+let returGl = false, returAlle = false;
+
+function returDag(iso){
+  const d = pd(iso.slice(0,10));
+  return {kort: d.getDate()+'.', navn: dagNavn(iso.slice(0,10)), weekend: [0,6].includes(d.getDay())};
+}
+
+function returGraf(){
+  const dage = R.dage || [];
+  if (!dage.length) return '';
+  const maks = Math.max(1, ...dage.map(d=>Math.max(d.op, d.fa)));
+  const soejler = dage.map(d => {
+    const i = returDag(d.d);
+    const tekst = i.navn+' '+kortDato(d.d)+': '+nf(d.op)+' oprettet · '+nf(d.fa)+' færdige';
+    return '<div class="graf-dag" title="'+esc(tekst)+'">'+
+      '<div class="graf-soejler"><i style="height:'+(d.op/maks*100).toFixed(1)+'%"></i>'+
+      '<i class="to" style="height:'+(d.fa/maks*100).toFixed(1)+'%"></i></div>'+
+      '<small>'+i.kort+'</small></div>';
+  }).join('');
+  const tabel = dage.map(d=>returDag(d.d).navn+' '+kortDato(d.d)+': '+d.op+' oprettet, '+d.fa+' færdige').join(' · ');
+  return '<div class="graf-top"><span class="graf-tegn"><i></i>Oprettet</span>'+
+      '<span class="graf-tegn to"><i></i>Færdigbehandlet</span>'+
+      '<span>Højeste dag: <b>'+nf(maks)+'</b> sager</span></div>'+
+    '<div class="graf" role="img" aria-label="'+esc('Retursager pr. dag de sidste 14 dage. '+tabel)+'">'+soejler+'</div>';
+}
+
+function returSag(s){
+  const alder = dageSiden(s.op);
+  const spor = s.tt ? '<a href="'+esc(s.tt)+'" target="_blank" rel="noopener">Spor pakken →</a>' : '';
+  return '<div class="ret-sag"><span class="nr">'+(s.oid?ordA({id:s.oid, n:s.ordre}):esc(s.ordre))+'</span>'+
+    koeAlder(s.op)+
+    '<span class="midt"><span>Oprettet '+kortDato(s.op.slice(0,10))+'</span>'+
+      (s.fragt?'<span class="fragt">'+esc(s.fragt)+'</span>':'')+
+      '<span>Forsendelse '+nf(s.nr)+'</span>'+
+      '<span>'+nf(s.stk)+(s.stk===1?' vare':' varer')+'</span></span>'+
+    '<span class="hoejre">'+spor+'</span></div>';
+}
+
+function visRetur(){
+  const q = state.q;
+  const st = R.stat || {};
+  const passer = s => (!returGl || dageSiden(s.op) >= 7) &&
+    (!q || (s.ordre+' '+s.nr+' '+(s.fragt||'')).toLowerCase().includes(q));
+  const vent = (R.ventende || []).filter(passer);
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(st.ventende||0)+'</b><span>ventende – oprettet, pakken er ikke modtaget</span></div>'+
+    '<div><b class="num"'+(R.gamle?' style="color:var(--late)"':'')+'>'+nf(R.gamle||0)+'</b><span>af dem er over 7 dage gamle</span></div>'+
+    '<div><b class="num">'+nf(st.faerdig||0)+'</b><span>færdigbehandlet</span></div>'+
+    '<div><b class="num">'+(R.median!=null?R.median+' dage':'–')+'</b><span>fra oprettet til færdig (median)</span></div></div>';
+  const liste = returAlle ? vent : vent.slice(0,40);
+  return '<p class="hint">Returpakker fra SmartPack de sidste '+(R.dage_vindue||30)+' dage. En sag er <b>ventende</b>, fra kunden opretter returen og får en label, til pakken er modtaget på lageret – ældste øverst. SmartPack kender ikke pakken undervejs, så "Spor pakken" åbner fragtfirmaets Track &amp; Trace.'+
+      (st.modtaget?' '+nf(st.modtaget)+' er modtaget og under behandling.':'')+
+      (st.aflyst?' '+nf(st.aflyst)+' er aflyst.':'')+'</p>'+
+    sum+
+    '<section class="hels-panel b2"><h2><small>Udvikling</small>Oprettede og færdigbehandlede pr. dag</h2>'+
+      returGraf()+
+      (R.snit!=null?'<p class="hels-und" style="margin-top:10px;font-weight:400;color:var(--ink2)">'+nf(R.behandlet)+' sager er behandlet i perioden. Der går typisk <b>'+R.median+' dage</b> fra kunden opretter returen, til den er færdig (gennemsnit '+R.snit+').</p>':'')+
+    '</section>'+
+    '<section class="hels-panel"><h2><small>Ventende</small>Retursager, vi mangler at modtage</h2>'+
+      '<div class="knaprad" style="margin:12px 0 0"><button type="button" class="filter-knap" id="ret-gl" aria-pressed="'+returGl+'">Kun over 7 dage ('+nf(R.gamle||0)+')</button>'+
+      '<span class="tal" style="align-self:center;font-size:13px;color:var(--ink2)">'+nf(vent.length)+' sager · '+nf(vent.reduce((a,s)=>a+s.stk,0))+' varer</span></div>'+
+      (liste.length ? liste.map(returSag).join('')+
+        (vent.length>liste.length?'<button type="button" class="koe-mere" id="ret-mere">Vis alle '+nf(vent.length)+' sager →</button>':'')+
+        (R.flere_ventende?'<p class="hint" style="margin:10px 18px 0">Kun de '+nf((R.ventende||[]).length)+' ældste sager vises.</p>':'')
+        : '<div class="empty">Ingen ventende retursager'+(q||returGl?' matcher.':'.')+'</div>')+
+    '</section>'+
+    '<section class="hels-panel b3"><h2><small>På lageret</small>Returkasser, der venter på at komme på plads</h2>'+
+      '<div class="hels-top">'+
+        '<div class="hels-tal"><b class="num">'+nf(R.kasse_stk||0)+'</b><span>stk i returkasserne</span></div>'+
+        '<div class="hels-tal"><b class="num">'+nf((R.kasser||[]).length)+'</b><span>kasser i brug</span></div>'+
+        ((R.kasser||[])[0] && R.kasser[0].aeldst ? '<div class="hels-tal'+(dageSiden(R.kasser[0].aeldst)>=7?' kritisk':'')+'"><b class="num">'+dageSiden(R.kasser[0].aeldst)+' d</b><span>har den ældste ligget</span></div>' : '')+
+      '</div>'+
+      ((R.kasser||[]).length ? '<div class="kasser">'+R.kasser.map(k=>{
+          const a = k.aeldst ? dageSiden(k.aeldst) : null;
+          return '<div class="kasse'+(a>=7?' gl':'')+'"><b>'+esc(k.navn)+'</b>'+
+            '<span>'+nf(k.stk)+' stk · '+nf(k.linjer)+(k.linjer===1?' vare':' varer')+'</span>'+
+            (a!=null?'<span>ældste '+(a<=0?'i dag':a+' dage')+'</span>':'')+'</div>';
+        }).join('')+'</div>' : '<div class="empty">Returkasserne er tomme.</div>')+
+    '</section>';
+}
+
+// Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
+const KAT = [
+  {k:'vare',  navn:'Varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
+  {k:'pluk',  navn:'Pluk & pak',     faner:['koe']},
+  {k:'ret',   navn:'Retur',          faner:['retur']},
+  {k:'hel',   navn:'Helsinge',       faner:['hels','flyt','kunhel']},
+  {k:'but',   navn:'Butik',          faner:['butik']},
+];
+const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
+  uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
+  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent i butikken'};
+let sidsteFane = {};
+try { sidsteFane = JSON.parse(localStorage.getItem('lv_faner') || '{}') || {}; } catch(_){}
+const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
+function faneTal(t){
+  return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
+    koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
+    hels:H.ordrer.length, flyt:F.ordrer.length, kunhel:khVar,
+    butik:B.filter(x=>x.nu>0).length}[t];
+}
+function katTal(k){
+  return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
+    hel:H.ordrer.length+F.ordrer.length, but:B.filter(x=>x.nu>0).length}[k];
+}
+function gemFane(){
+  sidsteFane[katFor(state.tab).k] = state.tab;
+  try { localStorage.setItem('lv_tab', state.tab); localStorage.setItem('lv_faner', JSON.stringify(sidsteFane)); } catch(_){}
+}
+
 function render(){
   $('#stats').innerHTML = statsHtml();
-  document.querySelectorAll('nav.tabs button').forEach(b=>{
-    const t = b.dataset.tab; b.setAttribute('aria-selected', t===state.tab);
-    const c = {prio:D.po.length, koe:koeVenter, hels:H.ordrer.length+F.ordrer.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length, flyt:F.ordrer.length, butik:B.filter(x=>x.nu>0).length, kunhel:khVar}[t];
-    b.innerHTML = b.textContent.replace(/\s*\d+$/,'') + (c!=null?'<span class="c">'+c+'</span>':'');
-  });
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
+  const nu = katFor(state.tab);
+  $('#hovednav').innerHTML = KAT.map(k=>{
+    const c = katTal(k.k);
+    return '<button type="button" data-kat="'+k.k+'" aria-selected="'+(k.k===nu.k)+'">'+esc(k.navn)+
+      (c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
+  }).join('');
+  const under = $('#undernav');
+  under.hidden = nu.faner.length < 2;
+  under.innerHTML = nu.faner.map(t=>{
+    const c = faneTal(t);
+    return '<button role="tab" id="tab-'+t+'" data-tab="'+t+'" aria-selected="'+(t===state.tab)+'">'+
+      esc(FANENAVN[t])+(c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
+  }).join('');
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
@@ -1043,23 +1192,29 @@ document.addEventListener('click', e=>{
   if (as){ const k = as.dataset.apSort; state.apSort = state.apSort.k===k ? {k, dir:-state.apSort.dir} : {k, dir: (k==='lev'||k==='dato'||k==='bestilt')?1:-1}; render(); return; }
   if (e.target.closest('#kh-filter')){ khKunOrdrer = !khKunOrdrer; render(); return; }
   if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
+  if (e.target.closest('#ret-gl')){ returGl = !returGl; returAlle = false; render(); return; }
+  if (e.target.closest('#ret-mere')){ returAlle = true; render(); return; }
   if (e.target.closest('#koe-fold')){ const luk = aabneKoe.size>0; aabneKoe = new Set(luk?[]:KOE_ORDEN);
     try{localStorage.setItem('lv_koe', JSON.stringify([...aabneKoe]))}catch(_){} render(); return; }
   const km = e.target.closest('[data-koe-mere]');
   if (km){ koeAlle.add(km.dataset.koeMere); render(); return; }
   if (e.target.closest('#alle-lok')){ alleLok = !alleLok; if (!alleLok) aabneLok.clear(); render(); return; }
   const s = e.target.closest('[data-span]');
-  if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab!=='prio'&&state.tab!=='varer') state.tab='prio'; render(); return; }
+  if (s){ state.span = state.span===s.dataset.span?null:s.dataset.span; if(state.tab!=='prio'&&state.tab!=='varer'){ state.tab='prio'; gemFane(); } render(); return; }
   const fb = e.target.closest('[data-tab-goto]');
-  if (fb){ state.tab = fb.dataset.tabGoto; try{localStorage.setItem('lv_tab',state.tab)}catch(_){} render(); document.querySelector('nav.tabs').scrollIntoView({block:'start',behavior:'smooth'}); return; }
+  if (fb){ state.tab = fb.dataset.tabGoto; gemFane(); render(); document.querySelector('nav.hoved').scrollIntoView({block:'start',behavior:'smooth'}); return; }
+  const kat = e.target.closest('[data-kat]');
+  if (kat){ const k = KAT.find(x=>x.k===kat.dataset.kat);
+    state.tab = (sidsteFane[k.k] && k.faner.includes(sidsteFane[k.k])) ? sidsteFane[k.k] : k.faner[0];
+    gemFane(); render(); return; }
   const t = e.target.closest('nav.tabs button');
-  if (t){ state.tab = t.dataset.tab; try{localStorage.setItem('lv_tab',state.tab)}catch(_){} render(); return; }
+  if (t){ state.tab = t.dataset.tab; gemFane(); render(); return; }
   if (e.target.closest('#bare')){ state.bare=!state.bare; render(); return; }
   if (e.target.closest('#rydspan')){ state.span=null; render(); return; }
   const so = e.target.closest('[data-sort]');
   if (so){ const k=so.dataset.sort; state.sort = {k, dir: state.sort.k===k ? -state.sort.dir : (['stk','ordrer','ps_po'].includes(k)?-1:1)}; render(); return; }
   const g = e.target.closest('[data-goto]');
-  if (g){ state.tab='prio'; state.span=null; state.q=''; $('#q').value=''; render();
+  if (g){ state.tab='prio'; gemFane(); state.span=null; state.q=''; $('#q').value=''; render();
     const el = document.querySelector('details[data-po="'+g.dataset.goto+'"]'); if(el){ el.open=true; el.scrollIntoView({block:'start',behavior:'smooth'}); } }
 });
 document.addEventListener('keydown', e=>{
