@@ -313,6 +313,19 @@ td.thumb{width:48px;padding-right:0}
 .ford i{display:block;height:10px;border-radius:4px;background:var(--accent);min-width:2px}
 .ford b{font-variant-numeric:tabular-nums;font-weight:500;color:var(--ink)}
 .ford-kol{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px 26px;margin-top:6px}
+.an-tbl{min-width:760px}
+.an-tbl td.navn{font-weight:500;white-space:nowrap}
+.an-tbl .bar{display:flex;align-items:center;gap:8px;justify-content:flex-end;min-width:110px}
+.an-tbl .bar i{display:block;height:9px;border-radius:4px;background:var(--accent);min-width:2px}
+.an-tbl tr.hurtig td.pct{color:var(--butik);font-weight:600}
+.an-tbl tr.doed td{background:color-mix(in srgb,var(--late-bg) 55%,transparent)}
+.an-tbl tr.doed td.navn{color:var(--late)}
+.an-tbl th.r,.an-tbl td.r{text-align:right}
+.an-noter{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0 0}
+.an-note{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--accent);border-radius:var(--radius-s);padding:10px 14px;font-size:13px;color:var(--ink2)}
+.an-note b{color:var(--ink);font-weight:600}
+.an-note.gl{border-left-color:var(--late)}
+.an-note.god{border-left-color:var(--butik)}
 .koe-alder{font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--panel2);color:var(--ink2);white-space:nowrap}
 .koe-alder.mid{background:var(--tom-bg);color:var(--tom)}
 .koe-alder.kritisk{background:var(--late-bg);color:var(--late);font-weight:500}
@@ -1296,13 +1309,79 @@ function visGenopfyld(){
             : 'Der er ikke solgt noget i butikken i perioden.')+'</div>');
 }
 
+// ---------------------------------------------------------------- Analyse: salg mod lager
+const AN = D.analyse || {maerker:[], typer:[], uden_butik:[], i_alt:{}};
+let anSort = 'stk';
+
+function anRaekker(liste){
+  const maks = Math.max(1, ...liste.map(r=>r.stk));
+  const sorter = {stk:(a,b)=>b.stk-a.stk, solgt:(a,b)=>b.solgt-a.solgt, vaerdi:(a,b)=>b.vaerdi-a.vaerdi,
+    pct:(a,b)=>anPct(b)-anPct(a)}[anSort] || ((a,b)=>b.stk-a.stk);
+  return liste.slice().sort(sorter).map(r=>{
+    const pct = anPct(r);
+    const uge = AN.dage ? (r.solgt / AN.dage * 7) : 0;                 // stk pr. uge i butikken
+    const webuge = AN.web_dage ? (r.web / AN.web_dage * 7) : 0;        // stk pr. uge online
+    const andel = (uge + webuge) > 0 ? Math.round(100 * uge / (uge + webuge)) : 0;
+    const uger = r.solgt > 0 ? (r.stk / (r.solgt / AN.dage * 7)) : null;
+    const kl = [r.solgt === 0 && r.stk >= 10 ? 'doed' : '', pct >= 20 ? 'hurtig' : ''].filter(Boolean).join(' ');
+    return '<tr'+(kl?' class="'+kl+'"':'')+'>'+
+      '<td class="navn">'+esc(r.navn)+'</td>'+
+      '<td class="r num">'+nf(r.stk)+'</td>'+
+      '<td class="r num">'+nf(r.solgt)+'</td>'+
+      '<td class="r pct"><span class="bar"><i style="width:'+Math.min(100, pct*2).toFixed(0)+'%"></i>'+pct.toFixed(0)+' %</span></td>'+
+      '<td class="r num">'+(r.stk<=0 ? 'tom' : uger!=null ? (uger<100?uger.toFixed(1):'99+') : '–')+'</td>'+
+      '<td class="r num">'+nf(r.web)+'</td>'+
+      '<td class="r num">'+andel+' %</td>'+
+      '<td class="r num">'+nf(r.vaerdi)+'</td></tr>';
+  }).join('');
+}
+function anPct(r){ const g = r.stk + r.solgt; return g ? 100 * r.solgt / g : 0; }
+
+function anTabel(titel, liste, hvad){
+  return '<section class="hels-panel b3"><h2><small>'+esc(hvad)+'</small>'+esc(titel)+'</h2>'+
+    '<div class="scroll" style="max-height:none;margin-top:12px"><table class="an-tbl"><thead><tr>'+
+      '<th>'+esc(hvad)+'</th><th class="r">I butikken</th><th class="r">Solgt '+AN.dage+' dg</th>'+
+      '<th class="r">Sælger</th><th class="r">Uger tilbage</th><th class="r">Web '+AN.web_dage+' dg</th>'+
+      '<th class="r">Butikkens andel</th><th class="r">Værdi</th></tr></thead><tbody>'+
+      anRaekker(liste)+'</tbody></table></div></section>';
+}
+
+function visAnalyse(){
+  const i = AN.i_alt || {};
+  const m = AN.maerker || [];
+  const hurtige = m.filter(r=>anPct(r) >= 20 && r.stk >= 10).sort((a,b)=>anPct(b)-anPct(a)).slice(0,4);
+  const doede = m.filter(r=>r.solgt === 0 && r.stk >= 10).sort((a,b)=>b.vaerdi-a.vaerdi).slice(0,5);
+  const stoerst = m.slice().sort((a,b)=>b.vaerdi-a.vaerdi)[0];
+  const pctIalt = i.stk+i.solgt ? 100*i.solgt/(i.stk+i.solgt) : 0;
+  const sum = '<div class="flyt-sum">'+
+    '<div class="hoved"><b class="num">'+nf(i.solgt||0)+'</b><span>stk solgt i butikken på '+AN.dage+' dage</span></div>'+
+    '<div><b class="num">'+pctIalt.toFixed(0)+' %</b><span>af beholdningen er solgt i perioden</span></div>'+
+    '<div><b class="num">'+nf(i.stk||0)+'</b><span>stk på hylderne ('+nf(i.maerker||0)+' mærker)</span></div>'+
+    '<div><b class="num">'+nf(i.vaerdi||0)+' kr</b><span>i udsalgspris</span></div></div>';
+  const noter = '<div class="an-noter">'+
+    (hurtige.length?'<div class="an-note god"><b>Sælger hurtigst:</b> '+hurtige.map(r=>esc(r.navn)+' ('+anPct(r).toFixed(0)+' %)').join(', ')+'. De kunne tåle mere hyldeplads.</div>':'')+
+    (doede.length?'<div class="an-note gl"><b>Står stille:</b> '+doede.map(r=>esc(r.navn)+' ('+nf(r.stk)+' stk / '+nf(r.vaerdi)+' kr)').join(', ')+' – intet solgt på '+AN.dage+' dage.</div>':'')+
+    (stoerst?'<div class="an-note"><b>Største position:</b> '+esc(stoerst.navn)+' med '+nf(stoerst.vaerdi)+' kr ('+Math.round(100*stoerst.vaerdi/(i.vaerdi||1))+' % af butikkens værdi) og '+anPct(stoerst).toFixed(0)+' % solgt i perioden.</div>':'')+
+    ((AN.uden_butik||[]).length?'<div class="an-note gl"><b>Sælger online, men står slet ikke i butikken:</b> '+AN.uden_butik.slice(0,5).map(x=>esc(x.navn)+' ('+nf(x.web)+' stk)').join(', ')+'.</div>':'')+
+    '</div>';
+  return sum+
+    '<p class="hint">Butikkens hylder holdt op mod salget. <b>Sælger</b> er andelen af beholdningen, der er solgt i perioden, og <b>uger tilbage</b> er, hvor længe beholdningen rækker i samme tempo. <b>Butikkens andel</b> er, hvor stor en del af efterspørgslen der sker i butikken frem for på webshoppen (omregnet til samme uge). Røde rækker har ikke solgt noget; grønne procenter sælger hurtigt.</p>'+
+    '<div class="knaprad">'+
+      ['stk','Mest på lager','solgt','Mest solgt','pct','Sælger hurtigst','vaerdi','Største værdi']
+        .reduce((a,x,n,arr)=> n%2 ? a : a.concat('<button type="button" class="filter-knap" data-an-sort="'+arr[n]+'" aria-pressed="'+(anSort===arr[n])+'">'+arr[n+1]+'</button>'), []).join('')+
+    '</div>'+
+    noter+
+    anTabel('Mærker', AN.maerker||[], 'Mærke')+
+    anTabel('Varetyper', AN.typer||[], 'Type');
+}
+
 // Fem områder øverst, med underfaner under. Sidst valgte underfane huskes pr. område.
 const KAT = [
   {k:'vare',  navn:'Varemodtagelse', url:'varemodtagelse', faner:['prio','allepo','dage','varer','uden']},
   {k:'pluk',  navn:'Pluk & pak',     url:'pluk',           faner:['koe']},
   {k:'ret',   navn:'Retur',          url:'retur',          faner:['retur']},
   {k:'hel',   navn:'Helsinge',       url:'helsinge',       faner:['hels','flyt','kunhel']},
-  {k:'but',   navn:'Butik',          url:'butik',          faner:['butik','butlager','butpop','genopfyld']},
+  {k:'but',   navn:'Butik',          url:'butik',          faner:['butik','butlager','butpop','genopfyld','analyse']},
 ];
 const BASE = '__BASE__', START = '__START__';
 if (START && KAT.some(k=>k.faner.includes(START))) state.tab = START;
@@ -1311,7 +1390,7 @@ function saetAdresse(k){
 }
 const FANENAVN = {prio:'Prioritet', allepo:"Alle PO'er", dage:'Ankomster', varer:'Presell-varer',
   uden:'Presell uden PO', koe:'Ordrer i kø', retur:'Returneringer', hels:'Overblik',
-  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu', genopfyld:'Genopfyldning'};
+  flyt:'Flyt fra Helsinge', kunhel:'Kun i Helsinge', butik:'Hent til ordrer', butlager:'Butikkens lager', butpop:'Populært lige nu', genopfyld:'Genopfyldning', analyse:'Analyse'};
 let sidsteFane = {};
 try { sidsteFane = JSON.parse(localStorage.getItem('lv_faner') || '{}') || {}; } catch(_){}
 const katFor = t => KAT.find(k => k.faner.includes(t)) || KAT[0];
@@ -1319,7 +1398,7 @@ function faneTal(t){
   return {prio:D.po.length, allepo:AP.length, dage:null, varer:D.varer.length, uden:D.uden_po.length,
     koe:koeVenter, retur:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
     hels:H.ordrer.filter(o=>o.kun).length, flyt:F.ordrer.length, kunhel:khVar,
-    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter, butpop:(BL.populaere||[]).length, genopfyld:(GF.udsolgt_kan||0)}[t];
+    butik:B.filter(x=>x.nu>0).length, butlager:BL.produkter, butpop:(BL.populaere||[]).length, genopfyld:(GF.udsolgt_kan||0), analyse:null}[t];
 }
 function katTal(k){
   return {vare:D.po.length, pluk:koeVenter, ret:(D.retur&&D.retur.stat?D.retur.stat.ventende:0),
@@ -1353,7 +1432,7 @@ function render(){
     return '<button role="tab" id="tab-'+t+'" data-tab="'+t+'" aria-selected="'+(t===state.tab)+'">'+
       esc(FANENAVN[t])+(c!=null?'<span class="c">'+nf(c)+'</span>':'')+'</button>';
   }).join('');
-  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager, butpop:visPopulaere, genopfyld:visGenopfyld}[state.tab] || visPrio)();
+  $('#view').innerHTML = ({prio:visPrio, koe:visKoe, retur:visRetur, hels:visHelsinge, allepo:visAllePO, dage:visDage, varer:visVarer, uden:visUden, flyt:visFlyt, butik:visButik, kunhel:visKunHel, butlager:visButikslager, butpop:visPopulaere, genopfyld:visGenopfyld, analyse:visAnalyse}[state.tab] || visPrio)();
 }
 
 document.addEventListener('click', e=>{
@@ -1370,6 +1449,8 @@ document.addEventListener('click', e=>{
   if (e.target.closest('#hel-kun')){ helKun = !helKun; render(); return; }
   if (e.target.closest('#bl-kun')){ blKun = !blKun; render(); return; }
   if (e.target.closest('#gf-kun')){ gfKun = !gfKun; render(); return; }
+  const ans = e.target.closest('[data-an-sort]');
+  if (ans){ anSort = ans.dataset.anSort; render(); return; }
   if (e.target.closest('#flyt-mere')){ flytAlle = true; render(); return; }
   const fs = e.target.closest('[data-flyt-sort]');
   if (fs){ flytSort = fs.dataset.flytSort; render(); return; }

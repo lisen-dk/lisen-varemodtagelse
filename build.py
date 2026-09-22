@@ -801,8 +801,8 @@ def vare_type(produktnavn, kategorier=None):
 
 
 # Butikssalg: SmartPacks POS-ordrer (orderType 4) er det, der er solgt i butikken.
-BUTIK_SALG_DAGE = int(os.environ.get("BUTIK_SALG_DAGE") or 7)
-BUTIK_SALG_SIDER = int(os.environ.get("BUTIK_SALG_SIDER") or 3)
+BUTIK_SALG_DAGE = int(os.environ.get("BUTIK_SALG_DAGE") or 14)
+BUTIK_SALG_SIDER = int(os.environ.get("BUTIK_SALG_SIDER") or 4)
 
 
 def hent_butikssalg():
@@ -839,6 +839,67 @@ def hent_butikssalg():
     log(f"Butikssalg: {sum(solgt.values())} stk i {ordrer} butiksordrer de sidste {BUTIK_SALG_DAGE} dage "
         f"({len(solgt)} varenumre, {sider} sider)")
     return dict(solgt)
+
+
+def beregn_analyse(lager, detaljer, butikssalg, salg=None, salg_dage=0):
+    """Butikkens lager holdt op mod salget – pr. mærke og pr. varetype."""
+    salg = salg or {}
+    maerker = collections.defaultdict(lambda: {"stk": 0, "solgt": 0, "web": 0, "vaerdi": 0.0,
+                                               "kost": 0.0, "varianter": 0})
+    typer = collections.defaultdict(lambda: {"stk": 0, "solgt": 0, "web": 0, "vaerdi": 0.0,
+                                             "kost": 0.0, "varianter": 0})
+
+    def nogler(sku):
+        v = detaljer.get(sku) or {}
+        m = v.get("manufacturerName") or "(uden mærke)"
+        t = type_navn(vare_type(v.get("productName"), v.get("categoryNames"))) or "(ukendt type)"
+        return m, t, float(v.get("salePrice") or v.get("normalPrice") or 0), float(v.get("cost") or 0)
+
+    for sku, pl in lager.items():
+        stk, _ = placeringer(pl)
+        if stk["butik"] <= 0:
+            continue
+        m, t, pris, kost = nogler(sku)
+        for d, n in ((maerker, m), (typer, t)):
+            d[n]["stk"] += tal(stk["butik"])
+            d[n]["vaerdi"] += stk["butik"] * pris
+            d[n]["kost"] += stk["butik"] * kost
+            d[n]["varianter"] += 1
+    for sku, antal in (butikssalg or {}).items():
+        m, t, _p, _k = nogler(sku)
+        maerker[m]["solgt"] += tal(antal)
+        typer[t]["solgt"] += tal(antal)
+    for sku, antal in salg.items():
+        m, t, _p, _k = nogler(sku)
+        maerker[m]["web"] += tal(antal)
+        typer[t]["web"] += tal(antal)
+
+    def liste(d):
+        ud = []
+        for navn, v in d.items():
+            if v["stk"] <= 0 and v["solgt"] <= 0:
+                continue          # mærker, der kun sælger online, tages med nedenfor
+            ud.append({"navn": navn, "stk": tal(v["stk"]), "solgt": tal(v["solgt"]),
+                       "web": tal(v["web"]), "vaerdi": round(v["vaerdi"]), "kost": round(v["kost"]),
+                       "varianter": v["varianter"]})
+        return sorted(ud, key=lambda x: -x["stk"])
+
+    mangler = sorted(({"navn": navn, "web": tal(v["web"])} for navn, v in maerker.items()
+                      if v["stk"] <= 0 and v["solgt"] <= 0 and v["web"] > 0),
+                     key=lambda x: -x["web"])[:10]
+    m_liste, t_liste = liste(maerker), liste(typer)
+    return {
+        "dage": BUTIK_SALG_DAGE, "web_dage": salg_dage or BUTIK_SALG_DAGE,
+        "maerker": m_liste, "typer": t_liste, "uden_butik": mangler,
+        "i_alt": {
+            "stk": tal(sum(x["stk"] for x in m_liste)),
+            "solgt": tal(sum(x["solgt"] for x in m_liste)),
+            "web": tal(sum(x["web"] for x in m_liste)),
+            "vaerdi": sum(x["vaerdi"] for x in m_liste),
+            "kost": sum(x["kost"] for x in m_liste),
+            "maerker": len([x for x in m_liste if x["stk"] > 0]),
+        },
+    }
 
 
 def beregn_genopfyld(lager, detaljer, butikssalg, salg=None):
@@ -1464,6 +1525,8 @@ def main():
     d["retur"] = beregn_retur(hent_retur(), retur_kasser)
     d["butikslager"] = beregn_butikslager(lager, varer, (salg or {}).get("solgt"))
     d["genopfyld"] = beregn_genopfyld(lager, varer, butikssalg, (salg or {}).get("solgt"))
+    d["analyse"] = beregn_analyse(lager, varer, butikssalg, (salg or {}).get("solgt"),
+                                  min((salg or {}).get("daekket") or 0, (salg or {}).get("dage") or 14))
     koblet = len({o["id"] for p in d["po"] for o in p["ordrer"]})
     log(f"PO'er med manglende varer: {len(d['po'])} · ordrer koblet til en PO: {koblet} · "
         f"uden PO: {len(d['uden_po'])} · presell-varianter i ordrer: {len(d['varer'])}")
@@ -1480,6 +1543,9 @@ def main():
     log(f"Butikslager: {bl['stk']} stk · {bl['varianter']} varianter · {bl['produkter']} produkter · "
         f"{bl['kun_butik']} stk findes kun i butikken · {bl['maerker_i_alt']} mærker · "
         f"{len(bl['populaere'])} populære varer mangler i butikken")
+    an = d["analyse"]
+    log(f"Analyse: {an['i_alt']['maerker']} mærker i butikken · {an['i_alt']['stk']} stk · "
+        f"{an['i_alt']['solgt']} solgt på {an['dage']} dage · {len(an['uden_butik'])} mærker sælger kun online")
     gf = d["genopfyld"]
     log(f"Genopfyldning: {gf['udsolgt']} varer er væk fra butikkens hylde "
         f"({gf['udsolgt_kan']} kan hentes på lagrene) · {gf['stoerrelser_tomme']} tomme størrelser")
