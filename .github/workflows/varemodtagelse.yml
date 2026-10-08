@@ -22,7 +22,9 @@ concurrency:
 jobs:
   byg:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # SmartPack er mærkbart langsommere i åbningstiden; en ny kørsel afbryder alligevel
+    # en, der trækker ud, så der er plads til en langsom morgen.
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v5
 
