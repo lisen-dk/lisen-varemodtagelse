@@ -5,18 +5,19 @@ on:
   repository_dispatch:
     types: [smartpack]            # sendes af Cloudflare-Workeren, når SmartPack melder ændringer
   schedule:
-    - cron: "*/30 4-20 * * *"     # sikkerhedsnet: hver halve time ca. kl. 06-22 dansk sommertid
+    - cron: "23 4-18 * * *"       # sikkerhedsnet: hver time ca. kl. 06-20 dansk tid
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Højst én kørsel ad gangen + én i kø. Kommer der flere ændringer, mens en kørsel er i gang,
-# samles de i den ene kørsel, der står i kø.
+# Højst én kørsel ad gangen. En ny kørsel afbryder den igangværende: den bygger alligevel
+# de samme tal forfra, og så kan en kørsel, der hænger fast (fx i udgivelsen), ikke
+# blokere køen i timevis.
 concurrency:
   group: varemodtagelse
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   byg:
@@ -60,6 +61,7 @@ jobs:
   udgiv:
     needs: byg
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
     steps:
