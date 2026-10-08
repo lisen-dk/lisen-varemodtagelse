@@ -212,6 +212,7 @@ RETUR_VENT_DAGE = int(os.environ.get("RETUR_VENT_DAGE") or 60)  # ventende sager
 RETUR_NYE_SIDER = int(os.environ.get("RETUR_NYE_SIDER") or 2)   # nyeste sider hver kørsel
 RETUR_BAGUD_SIDER = int(os.environ.get("RETUR_BAGUD_SIDER") or 1)  # sider længere nede pr. kørsel
 RETUR_TJEK = int(os.environ.get("RETUR_TJEK") or 60)            # ventende sager, der slås op enkeltvis
+RETUR_DOED_DAGE = int(os.environ.get("RETUR_DOED_DAGE") or 7)   # ventende så længe = kunden har nok aldrig sendt pakken
 RETUR_FIL = os.path.join(HER, "state", "retur.json")
 
 
@@ -327,7 +328,12 @@ def beregn_retur(sager, kasser):
     """Status, ventende sager efter alder, udvikling pr. dag og lagerets returkasser."""
     idag = datetime.now(timezone.utc).date()
     stat = collections.Counter(RETUR_STATE.get(s["st"], "andet") for s in sager)
-    ventende = sorted((s for s in sager if s["st"] == 1), key=lambda s: s["op"])
+    # En label, der stadig er ubrugt efter RETUR_DOED_DAGE dage, er sjældent en pakke på vej.
+    # Den slags holdes ude af arbejdslisten og af tallene, men smides ikke væk.
+    doed_graense = (idag - timedelta(days=RETUR_DOED_DAGE)).isoformat()
+    alle_vent = sorted((s for s in sager if s["st"] == 1), key=lambda s: s["op"])
+    ventende = [s for s in alle_vent if s["op"][:10] >= doed_graense]
+    doede = [s for s in alle_vent if s["op"][:10] < doed_graense]
     behandling = []
     for s in sager:
         if s["st"] == 3 and s["op"] and s["fa"]:
@@ -345,11 +351,16 @@ def beregn_retur(sager, kasser):
             dage[s["op"][:10]]["op"] += 1
         if s["st"] == 3 and s["fa"][:10] in dage:
             dage[s["fa"][:10]]["fa"] += 1
-    gammel = sum(1 for s in ventende if s["op"][:10] < (idag - timedelta(days=7)).isoformat())
+    tal_stat = {k: stat.get(k, 0) for k in ("ventende", "modtaget", "faerdig", "aflyst")}
+    tal_stat["ventende"] = len(ventende)   # kun dem, der reelt kan være på vej
     return {
         "dage_vindue": RETUR_DAGE,
-        "stat": {k: stat.get(k, 0) for k in ("ventende", "modtaget", "faerdig", "aflyst")},
-        "gamle": gammel,
+        "doed_dage": RETUR_DOED_DAGE,
+        "stat": tal_stat,
+        "doede": len(doede),
+        "doed_stk": tal(sum(s["stk"] for s in doede)),
+        "doede_sager": doede[:400],
+        "flere_doede": max(0, len(doede) - 400),
         "stk_ventende": tal(sum(s["stk"] for s in ventende)),
         "median": behandling[len(behandling) // 2] if behandling else None,
         "snit": round(sum(behandling) / len(behandling), 1) if behandling else None,
@@ -1561,7 +1572,7 @@ def main():
     log(f"Genopfyldning: {gf['udsolgt']} varer er væk fra butikkens hylde "
         f"({gf['udsolgt_kan']} kan hentes på lagrene) · {gf['stoerrelser_tomme']} tomme størrelser")
     r = d["retur"]
-    log(f"Returneringer: {r['stat']['ventende']} ventende ({r['gamle']} over 7 dage) · "
+    log(f"Returneringer: {r['stat']['ventende']} ventende · {r['doede']} uafsendte (over {r['doed_dage']} dage) · "
         f"{r['stat']['faerdig']} færdige · {r['kasse_stk']} stk i {len(r['kasser'])} returkasser")
     koe = collections.Counter(o["g"] for o in d["koe"])
     log("Ordrer i kø: " + " · ".join(f"{g} {koe.get(g, 0)}" for g in KOE_ORDEN))

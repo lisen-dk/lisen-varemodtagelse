@@ -292,6 +292,11 @@ td.thumb{width:48px;padding-right:0}
 .graf-tegn{display:inline-flex;align-items:center;gap:6px}
 .graf-tegn i{width:11px;height:11px;border-radius:3px;background:var(--serie1);display:block}
 .graf-tegn.to i{background:var(--serie2)}
+.ret-doed>summary{cursor:pointer;list-style-position:inside;padding:14px 18px;display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline}
+.ret-doed>summary b{font-size:15px}
+.ret-doed>summary span{font-size:12.5px;color:var(--ink2)}
+.ret-doed[open]>summary{border-bottom:1px solid var(--line2)}
+.flyt-sum .daemp b.num{color:var(--ink2)}
 .ret-sag{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:9px 18px;border-top:1px solid var(--line2)}
 .ret-sag .nr{font-family:var(--mono);font-size:13px;white-space:nowrap}
 .ret-sag .koe-alder,.koe-ordre .koe-alder{justify-self:start}
@@ -1113,7 +1118,7 @@ function visHelsinge(){
 // og sagen bliver Færdig, når lageret har behandlet den. "I transit" kender SmartPack ikke
 // – derfor linkes der direkte til fragtfirmaets Track & Trace på hver ventende sag.
 const R = D.retur || {stat:{}, ventende:[], dage:[], kasser:[]};
-let returGl = false, returAlle = false;
+let returAlle = false, doedAlle = false;
 
 function returDag(iso){
   const d = pd(iso.slice(0,10));
@@ -1154,16 +1159,18 @@ function returSag(s){
 function visRetur(){
   const q = state.q;
   const st = R.stat || {};
-  const passer = s => (!returGl || dageSiden(s.op) >= 7) &&
-    (!q || (s.ordre+' '+s.nr+' '+(s.fragt||'')).toLowerCase().includes(q));
+  const dd = R.doed_dage || 7;
+  const passer = s => !q || (s.ordre+' '+s.nr+' '+(s.fragt||'')).toLowerCase().includes(q);
   const vent = (R.ventende || []).filter(passer);
+  const doede = (R.doede_sager || []).filter(passer);
   const sum = '<div class="flyt-sum">'+
-    '<div class="hoved"><b class="num">'+nf(st.ventende||0)+'</b><span>ventende – oprettet, pakken er ikke modtaget</span></div>'+
-    '<div><b class="num"'+(R.gamle?' style="color:var(--late)"':'')+'>'+nf(R.gamle||0)+'</b><span>af dem er over 7 dage gamle</span></div>'+
+    '<div class="hoved"><b class="num">'+nf(st.ventende||0)+'</b><span>ventende – pakken er ikke modtaget endnu</span></div>'+
     '<div><b class="num">'+nf(st.faerdig||0)+'</b><span>færdigbehandlet</span></div>'+
-    '<div><b class="num">'+(R.median!=null?R.median+' dage':'–')+'</b><span>fra oprettet til færdig (median)</span></div></div>';
+    '<div><b class="num">'+(R.median!=null?R.median+' dage':'–')+'</b><span>fra oprettet til færdig (median)</span></div>'+
+    '<div class="daemp"><b class="num">'+nf(R.doede||0)+'</b><span>labels over '+dd+' dage gamle – nok aldrig afsendt</span></div></div>';
   const liste = returAlle ? vent : vent.slice(0,40);
-  return '<p class="hint">Returpakker fra SmartPack de sidste '+(R.dage_vindue||30)+' dage. En sag er <b>ventende</b>, fra kunden opretter returen og får en label, til pakken er modtaget på lageret – ældste øverst. SmartPack kender ikke pakken undervejs, så "Spor pakken" åbner fragtfirmaets Track &amp; Trace.'+
+  const dliste = doedAlle ? doede : doede.slice(0,40);
+  return '<p class="hint">Returpakker fra SmartPack. En sag er <b>ventende</b>, fra kunden opretter returen og får en label, til pakken er modtaget på lageret – ældste øverst. Labels, der er mere end '+dd+' dage gamle, er flyttet ned i en egen liste: der er sjældent en pakke på vej, og de tæller ikke med i tallene. SmartPack kender ikke pakken undervejs, så "Spor pakken" åbner fragtfirmaets Track &amp; Trace.'+
       (st.modtaget?' '+nf(st.modtaget)+' er modtaget og under behandling.':'')+
       (st.aflyst?' '+nf(st.aflyst)+' er aflyst.':'')+'</p>'+
     sum+
@@ -1172,13 +1179,20 @@ function visRetur(){
       (R.snit!=null?'<p class="hels-und" style="margin-top:10px;font-weight:400;color:var(--ink2)">'+nf(R.behandlet)+' sager er behandlet i perioden. Der går typisk <b>'+R.median+' dage</b> fra kunden opretter returen, til den er færdig (gennemsnit '+R.snit+').</p>':'')+
     '</section>'+
     '<section class="hels-panel"><h2><small>Ventende</small>Retursager, vi mangler at modtage</h2>'+
-      '<div class="knaprad" style="margin:12px 0 0"><button type="button" class="filter-knap" id="ret-gl" aria-pressed="'+returGl+'">Kun over 7 dage ('+nf(R.gamle||0)+')</button>'+
-      '<span class="tal" style="align-self:center;font-size:13px;color:var(--ink2)">'+nf(vent.length)+' sager · '+nf(vent.reduce((a,s)=>a+s.stk,0))+' varer</span></div>'+
+      '<div class="knaprad" style="margin:12px 0 0"><span class="tal" style="align-self:center;font-size:13px;color:var(--ink2)">'+nf(vent.length)+' sager · '+nf(vent.reduce((a,s)=>a+s.stk,0))+' varer · oprettet inden for '+dd+' dage</span></div>'+
       (liste.length ? liste.map(returSag).join('')+
         (vent.length>liste.length?'<button type="button" class="koe-mere" id="ret-mere">Vis alle '+nf(vent.length)+' sager →</button>':'')+
         (R.flere_ventende?'<p class="hint" style="margin:10px 18px 0">Kun de '+nf((R.ventende||[]).length)+' ældste sager vises.</p>':'')
-        : '<div class="empty">Ingen ventende retursager'+(q||returGl?' matcher.':'.')+'</div>')+
+        : '<div class="empty">Ingen ventende retursager'+(q?' matcher.':'.')+'</div>')+
     '</section>'+
+    '<section class="hels-panel"><details class="ret-doed"'+(q&&doede.length?' open':'')+'>'+
+      '<summary><b>Formentlig aldrig afsendt</b><span>'+nf(R.doede||0)+' sager · '+nf(R.doed_stk||0)+' varer · oprettet for over '+dd+' dage siden</span></summary>'+
+      '<p class="hint">Kunden har oprettet returen og fået en label, men pakken er stadig ikke kommet ind. Erfaringsmæssigt bliver de fleste af dem aldrig sendt, så de ligger her i stedet for på arbejdslisten – og tæller hverken med i tallet øverst eller på RETUR-knappen. Slå dem op her, hvis en kunde spørger.</p>'+
+      (dliste.length ? dliste.map(returSag).join('')+
+        (doede.length>dliste.length?'<button type="button" class="koe-mere" id="doed-mere">Vis alle '+nf(doede.length)+' sager →</button>':'')+
+        (R.flere_doede?'<p class="hint" style="margin:10px 18px 0">Kun de '+nf((R.doede_sager||[]).length)+' ældste vises.</p>':'')
+        : '<div class="empty">Ingen'+(q?' matcher.':'.')+'</div>')+
+    '</details></section>'+
     '<section class="hels-panel b3"><h2><small>På lageret</small>Returkasser, der venter på at komme på plads</h2>'+
       '<div class="hels-top">'+
         '<div class="hels-tal"><b class="num">'+nf(R.kasse_stk||0)+'</b><span>stk i returkasserne</span></div>'+
@@ -1455,8 +1469,8 @@ document.addEventListener('click', e=>{
   const fs = e.target.closest('[data-flyt-sort]');
   if (fs){ flytSort = fs.dataset.flytSort; render(); return; }
   if (e.target.closest('#koe-gl')){ koeGl = !koeGl; render(); return; }
-  if (e.target.closest('#ret-gl')){ returGl = !returGl; returAlle = false; render(); return; }
   if (e.target.closest('#ret-mere')){ returAlle = true; render(); return; }
+  if (e.target.closest('#doed-mere')){ doedAlle = true; render(); return; }
   if (e.target.closest('#koe-fold')){ const luk = aabneKoe.size>0; aabneKoe = new Set(luk?[]:KOE_ORDEN);
     try{localStorage.setItem('lv_koe', JSON.stringify([...aabneKoe]))}catch(_){} render(); return; }
   const km = e.target.closest('[data-koe-mere]');
