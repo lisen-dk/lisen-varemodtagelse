@@ -1,11 +1,16 @@
 name: Varemodtagelse
 
+# MANUEL DRIFT (20. okt. 2026)
+# SmartPack blev mærkbart hurtigere, da vi slukkede for alt. Derfor kører dashboardet
+# indtil videre KUN, når nogen trykker "Run workflow" her på siden (eller kører
+# `python3 github.py koer`). Hverken timeplanen eller Cloudflare-Workeren starter noget.
+# Skal den automatiske drift tilbage, fjernes kommentartegnene nedenfor igen.
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [smartpack]            # sendes af Cloudflare-Workeren, når SmartPack melder ændringer
-  schedule:
-    - cron: "23 4-18 * * *"       # sikkerhedsnet: hver time ca. kl. 06-20 dansk tid
+  # repository_dispatch:
+  #   types: [smartpack]          # sendes af Cloudflare-Workeren, når SmartPack melder ændringer
+  # schedule:
+  #   - cron: "23 4-18 * * *"     # sikkerhedsnet: hver time ca. kl. 06-20 dansk tid
 
 permissions:
   contents: read
